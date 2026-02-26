@@ -20,6 +20,17 @@ interface ClientMatterInfo {
   matterNumber: string;
 }
 
+interface DiffLine {
+  type: "added" | "removed" | "unchanged";
+  value: string;
+}
+
+interface DiffData {
+  lines: DiffLine[];
+  file1Name: string;
+  file2Name: string;
+}
+
 function buildClientMatterHeader(cm: ClientMatterInfo): Paragraph[] {
   return [
     new Paragraph({
@@ -50,27 +61,126 @@ function buildClientMatterHeader(cm: ClientMatterInfo): Paragraph[] {
   ];
 }
 
+function buildDiffElements(diff: DiffData): Paragraph[] {
+  const elements: Paragraph[] = [];
+
+  // Diff header
+  elements.push(
+    new Paragraph({
+      heading: HeadingLevel.HEADING_1,
+      children: [new TextRun({ text: "Line-by-Line Comparison" })],
+    })
+  );
+  elements.push(
+    new Paragraph({
+      children: [
+        new TextRun({ text: "Comparing: ", bold: true, size: 22 }),
+        new TextRun({ text: `${diff.file1Name} vs ${diff.file2Name}`, size: 22 }),
+      ],
+    })
+  );
+  elements.push(new Paragraph({ children: [] }));
+
+  for (const line of diff.lines) {
+    if (line.type === "added") {
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `+ ${line.value || " "}`,
+              color: "2563EB",
+              font: "Courier New",
+              size: 20,
+            }),
+          ],
+        })
+      );
+    } else if (line.type === "removed") {
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `- ${line.value || " "}`,
+              color: "DC2626",
+              strike: true,
+              font: "Courier New",
+              size: 20,
+            }),
+          ],
+        })
+      );
+    } else {
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `  ${line.value || " "}`,
+              font: "Courier New",
+              size: 20,
+            }),
+          ],
+        })
+      );
+    }
+  }
+
+  return elements;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { markdown, clientMatter } = await req.json();
-    if (!markdown || typeof markdown !== "string") {
+    const { markdown, clientMatter, diff } = await req.json();
+
+    // Must have either markdown or diff data
+    if (!markdown && !diff) {
       return Response.json({ error: "No content provided" }, { status: 400 });
     }
 
     const header = clientMatter ? buildClientMatterHeader(clientMatter as ClientMatterInfo) : [];
-    const body = markdownToDocxElements(markdown);
+    const diffElements = diff ? buildDiffElements(diff as DiffData) : [];
+    const markdownElements = markdown ? markdownToDocxElements(markdown) : [];
+
+    // If both diff and markdown, add a separator and "Summary" heading before the markdown
+    const summarySection: Paragraph[] = [];
+    if (diff && markdown) {
+      summarySection.push(new Paragraph({ children: [] }));
+      summarySection.push(
+        new Paragraph({
+          border: {
+            bottom: { style: BorderStyle.SINGLE, size: 1, color: "999999" },
+          },
+          children: [],
+        })
+      );
+      summarySection.push(new Paragraph({ children: [] }));
+      summarySection.push(
+        new Paragraph({
+          heading: HeadingLevel.HEADING_1,
+          children: [new TextRun({ text: "Summary" })],
+        })
+      );
+      summarySection.push(new Paragraph({ children: [] }));
+    }
 
     const doc = new Document({
-      sections: [{ children: [...header, ...body] }],
+      sections: [{
+        children: [
+          ...header,
+          ...diffElements,
+          ...summarySection,
+          ...markdownElements,
+        ],
+      }],
     });
 
     const buffer = await Packer.toBuffer(doc);
+    const filename = diff ? "comparison.docx" : "analysis.docx";
 
     return new Response(new Uint8Array(buffer), {
       headers: {
         "Content-Type":
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Content-Disposition": 'attachment; filename="analysis.docx"',
+        "Content-Disposition": `attachment; filename="${filename}"`,
       },
     });
   } catch (err) {
