@@ -35,6 +35,12 @@ function buildClientMatterHeader(cm: ClientMatterInfo): Paragraph[] {
       ],
     }),
     new Paragraph({
+      children: [
+        new TextRun({ text: "Date: ", bold: true, size: 22 }),
+        new TextRun({ text: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), size: 22 }),
+      ],
+    }),
+    new Paragraph({
       border: {
         bottom: { style: BorderStyle.SINGLE, size: 1, color: "999999" },
       },
