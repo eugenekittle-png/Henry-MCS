@@ -143,7 +143,17 @@ export default function BreakdownPage() {
           </button>
         )}
 
-        <StreamingResponse content={content} isStreaming={isStreaming} error={error} />
+        <StreamingResponse
+          content={content}
+          isStreaming={isStreaming}
+          error={error}
+          clientMatter={selectedClient && selectedMatter ? {
+            clientName: selectedClient.name,
+            clientNumber: selectedClient.client_number,
+            matterDescription: selectedMatter.description,
+            matterNumber: selectedMatter.matter_number,
+          } : null}
+        />
       </div>
     </div>
   );

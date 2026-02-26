@@ -4,16 +4,25 @@ import { useCallback, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+interface ClientMatterInfo {
+  clientName: string;
+  clientNumber: string;
+  matterDescription: string;
+  matterNumber: string;
+}
+
 interface StreamingResponseProps {
   content: string;
   isStreaming: boolean;
   error?: string | null;
+  clientMatter?: ClientMatterInfo | null;
 }
 
 export default function StreamingResponse({
   content,
   isStreaming,
   error,
+  clientMatter,
 }: StreamingResponseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -21,7 +30,7 @@ export default function StreamingResponse({
     const res = await fetch("/api/export-docx", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ markdown: content }),
+      body: JSON.stringify({ markdown: content, clientMatter: clientMatter || undefined }),
     });
     if (!res.ok) return;
     const blob = await res.blob();
@@ -31,7 +40,7 @@ export default function StreamingResponse({
     a.download = "analysis.docx";
     a.click();
     URL.revokeObjectURL(url);
-  }, [content]);
+  }, [content, clientMatter]);
 
   useEffect(() => {
     if (isStreaming && containerRef.current) {

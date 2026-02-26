@@ -13,17 +13,49 @@ import {
   BorderStyle,
 } from "docx";
 
+interface ClientMatterInfo {
+  clientName: string;
+  clientNumber: string;
+  matterDescription: string;
+  matterNumber: string;
+}
+
+function buildClientMatterHeader(cm: ClientMatterInfo): Paragraph[] {
+  return [
+    new Paragraph({
+      children: [
+        new TextRun({ text: "Client: ", bold: true, size: 22 }),
+        new TextRun({ text: `${cm.clientName} (${cm.clientNumber})`, size: 22 }),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({ text: "Matter: ", bold: true, size: 22 }),
+        new TextRun({ text: `${cm.matterDescription} (${cm.matterNumber})`, size: 22 }),
+      ],
+    }),
+    new Paragraph({
+      border: {
+        bottom: { style: BorderStyle.SINGLE, size: 1, color: "999999" },
+      },
+      children: [],
+    }),
+    new Paragraph({ children: [] }),
+  ];
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { markdown } = await req.json();
+    const { markdown, clientMatter } = await req.json();
     if (!markdown || typeof markdown !== "string") {
       return Response.json({ error: "No content provided" }, { status: 400 });
     }
 
-    const children = markdownToDocxElements(markdown);
+    const header = clientMatter ? buildClientMatterHeader(clientMatter as ClientMatterInfo) : [];
+    const body = markdownToDocxElements(markdown);
 
     const doc = new Document({
-      sections: [{ children }],
+      sections: [{ children: [...header, ...body] }],
     });
 
     const buffer = await Packer.toBuffer(doc);
