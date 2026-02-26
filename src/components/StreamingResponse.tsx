@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -16,6 +16,22 @@ export default function StreamingResponse({
   error,
 }: StreamingResponseProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleDownload = useCallback(async () => {
+    const res = await fetch("/api/export-docx", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown: content }),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "analysis.docx";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [content]);
 
   useEffect(() => {
     if (isStreaming && containerRef.current) {
@@ -54,6 +70,17 @@ export default function StreamingResponse({
       </div>
       {isStreaming && content && (
         <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-0.5" />
+      )}
+      {!isStreaming && content && (
+        <button
+          onClick={handleDownload}
+          className="mt-4 w-full bg-gray-800 text-white py-2.5 px-4 rounded-lg text-sm font-medium hover:bg-gray-900 transition-colors flex items-center justify-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download
+        </button>
       )}
     </div>
   );
