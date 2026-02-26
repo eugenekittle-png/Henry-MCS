@@ -1,4 +1,5 @@
 import { parsePdf } from "./pdf";
+import { parseDoc } from "./doc";
 import { parseDocx } from "./docx";
 import { parseXlsx } from "./xlsx";
 import { parseText } from "./text";
@@ -10,6 +11,8 @@ export async function parseFile(buffer: Buffer, filename: string): Promise<strin
   switch (ext) {
     case ".pdf":
       return parsePdf(buffer);
+    case ".doc":
+      return parseDoc(buffer);
     case ".docx":
       return parseDocx(buffer);
     case ".xlsx":

@@ -13,8 +13,10 @@ export const SUPPORTED_TYPES: Record<string, string[]> = {
 };
 
 export const SUPPORTED_EXTENSIONS = [
-  ".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv", ".zip",
+  ".pdf", ".doc", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv", ".zip",
 ];
+
+export const COMPARE_EXTENSIONS = [".pdf", ".doc", ".docx"];
 
 export const SUMMARY_SYSTEM_PROMPT = `You are an expert document analyst working within a legal/professional services context. The user has uploaded one or more documents and needs a comprehensive summary.
 
@@ -42,3 +44,17 @@ Your task:
    - Any notable gaps or observations
 4. Use markdown formatting with headers, tables, and bullet points for clarity
 5. When client and matter context is provided, tailor the analysis to be relevant to that specific engagement`;
+
+export const COMPARE_SYSTEM_PROMPT = `You are an expert document comparison analyst working within a legal/professional services context. The user has uploaded two documents that need to be compared.
+
+Your task:
+1. Carefully read both documents
+2. Provide a structured comparison that includes:
+   - A brief summary of each document
+   - Key similarities between the documents
+   - Key differences between the documents, organized by topic or section
+   - Notable additions, deletions, or modifications from one document to the other
+   - Any inconsistencies or contradictions between the documents
+3. Use markdown formatting with headers, bullet points, tables, and bold text for clarity
+4. When client and matter context is provided, tailor the comparison to be relevant to that specific engagement
+5. Focus on substantive differences rather than formatting or stylistic changes`;

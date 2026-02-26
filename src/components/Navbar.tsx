@@ -26,6 +26,9 @@ export default function Navbar() {
           <Link href="/breakdown" className={linkClass("/breakdown")}>
             Document Breakdown
           </Link>
+          <Link href="/compare" className={linkClass("/compare")}>
+            Document Compare
+          </Link>
         </div>
       </div>
     </nav>
