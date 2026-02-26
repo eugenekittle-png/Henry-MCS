@@ -145,7 +145,7 @@ export default function ComparePage() {
   }, [file1, file2, selectedClient, selectedMatter, includeSummary, streamSummary]);
 
   const handleDownload = useCallback(async () => {
-    const res = await fetch("/api/export-docx", {
+    const res = await fetch("/api/export-compare-pdf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -164,7 +164,7 @@ export default function ComparePage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "comparison.docx";
+    a.download = "comparison.pdf";
     a.click();
     URL.revokeObjectURL(url);
   }, [diffLines, diffFile1Name, diffFile2Name, summaryContent, selectedClient, selectedMatter]);
