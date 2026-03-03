@@ -12,7 +12,7 @@ export async function PUT(
       return Response.json({ error: "Invalid matter ID" }, { status: 400 });
     }
 
-    const existing = getMatter(matterId);
+    const existing = await getMatter(matterId);
     if (!existing) {
       return Response.json({ error: "Matter not found" }, { status: 404 });
     }
@@ -22,7 +22,7 @@ export async function PUT(
       return Response.json({ error: "Matter number and description are required" }, { status: 400 });
     }
 
-    const updated = updateMatter(matterId, matter_number, description);
+    const updated = await updateMatter(matterId, matter_number, description);
     return Response.json(updated);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update matter";
@@ -41,11 +41,11 @@ export async function DELETE(
     return Response.json({ error: "Invalid matter ID" }, { status: 400 });
   }
 
-  const existing = getMatter(matterId);
+  const existing = await getMatter(matterId);
   if (!existing) {
     return Response.json({ error: "Matter not found" }, { status: 404 });
   }
 
-  deleteMatter(matterId);
+  await deleteMatter(matterId);
   return Response.json({ success: true });
 }

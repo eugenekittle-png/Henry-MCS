@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getMattersForClient, createMatter, getClient } from "@/lib/db";
+import { getMattersForClient, dbCreateMatter, getClient } from "@/lib/db";
 
 export async function GET(
   _req: NextRequest,
@@ -11,7 +11,7 @@ export async function GET(
     return Response.json({ error: "Invalid client ID" }, { status: 400 });
   }
 
-  const matters = getMattersForClient(clientId);
+  const matters = await getMattersForClient(clientId);
   return Response.json(matters);
 }
 
@@ -26,7 +26,7 @@ export async function POST(
       return Response.json({ error: "Invalid client ID" }, { status: 400 });
     }
 
-    const client = getClient(clientId);
+    const client = await getClient(clientId);
     if (!client) {
       return Response.json({ error: "Client not found" }, { status: 404 });
     }
@@ -36,7 +36,7 @@ export async function POST(
       return Response.json({ error: "Matter number and description are required" }, { status: 400 });
     }
 
-    const matter = createMatter(clientId, matter_number, description);
+    const matter = await dbCreateMatter(clientId, matter_number, description);
     return Response.json(matter, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create matter";

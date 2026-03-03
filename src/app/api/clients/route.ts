@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { getClients, createClient } from "@/lib/db";
+import { getClients, dbCreateClient } from "@/lib/db";
 
 export async function GET() {
-  const clients = getClients();
+  const clients = await getClients();
   return Response.json(clients);
 }
 
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     if (!client_number || !name) {
       return Response.json({ error: "Client number and name are required" }, { status: 400 });
     }
-    const client = createClient(client_number, name);
+    const client = await dbCreateClient(client_number, name);
     return Response.json(client, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create client";

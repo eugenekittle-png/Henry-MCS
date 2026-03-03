@@ -12,7 +12,7 @@ export async function PUT(
       return Response.json({ error: "Invalid client ID" }, { status: 400 });
     }
 
-    const existing = getClient(clientId);
+    const existing = await getClient(clientId);
     if (!existing) {
       return Response.json({ error: "Client not found" }, { status: 404 });
     }
@@ -22,7 +22,7 @@ export async function PUT(
       return Response.json({ error: "Client number and name are required" }, { status: 400 });
     }
 
-    const updated = updateClient(clientId, client_number, name);
+    const updated = await updateClient(clientId, client_number, name);
     return Response.json(updated);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update client";
@@ -41,11 +41,11 @@ export async function DELETE(
     return Response.json({ error: "Invalid client ID" }, { status: 400 });
   }
 
-  const existing = getClient(clientId);
+  const existing = await getClient(clientId);
   if (!existing) {
     return Response.json({ error: "Client not found" }, { status: 404 });
   }
 
-  deleteClient(clientId);
+  await deleteClient(clientId);
   return Response.json({ success: true });
 }

@@ -1,26 +1,17 @@
-import Database from "better-sqlite3";
-import path from "path";
-import fs from "fs";
+import { createClient } from "@libsql/client";
 
-const DB_PATH = path.join(process.cwd(), "data", "henry-mcs.db");
+const db = createClient({
+  url: process.env.TURSO_DATABASE_URL || "file:data/henry-mcs.db",
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
 
-let db: Database.Database | null = null;
+let initialized = false;
 
-function getDb(): Database.Database {
-  if (db) return db;
+async function ensureInit() {
+  if (initialized) return;
+  initialized = true;
 
-  // Ensure data directory exists
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-
-  // Create tables
-  db.exec(`
+  await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS clients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       client_number TEXT UNIQUE NOT NULL,
@@ -39,137 +30,140 @@ function getDb(): Database.Database {
   `);
 
   // Seed if empty
-  const count = db.prepare("SELECT COUNT(*) as count FROM clients").get() as { count: number };
-  if (count.count === 0) {
-    seed(db);
+  const result = await db.execute("SELECT COUNT(*) as count FROM clients");
+  const count = result.rows[0].count as number;
+  if (count === 0) {
+    await seed();
   }
-
-  return db;
 }
 
-function seed(db: Database.Database) {
-  const insertClient = db.prepare(
-    "INSERT INTO clients (client_number, name) VALUES (?, ?)"
-  );
-  const insertMatter = db.prepare(
-    "INSERT INTO matters (client_id, matter_number, description) VALUES (?, ?, ?)"
-  );
-
-  const seedData = db.transaction(() => {
-    const c1 = insertClient.run("CLT-001", "Acme Corporation");
-    const c2 = insertClient.run("CLT-002", "Globex Industries");
-    const c3 = insertClient.run("CLT-003", "Wayne Enterprises");
-    const c4 = insertClient.run("CLT-004", "Stark Industries");
-
-    insertMatter.run(c1.lastInsertRowid, "MTR-001", "Annual Compliance Review 2026");
-    insertMatter.run(c1.lastInsertRowid, "MTR-002", "Contract Dispute — Supplier Agreement");
-    insertMatter.run(c1.lastInsertRowid, "MTR-003", "IP Portfolio Assessment");
-
-    insertMatter.run(c2.lastInsertRowid, "MTR-001", "Merger Due Diligence");
-    insertMatter.run(c2.lastInsertRowid, "MTR-002", "Environmental Compliance Audit");
-
-    insertMatter.run(c3.lastInsertRowid, "MTR-001", "Real Estate Acquisition — Gotham Tower");
-    insertMatter.run(c3.lastInsertRowid, "MTR-002", "Employee Benefits Plan Review");
-    insertMatter.run(c3.lastInsertRowid, "MTR-003", "Insurance Coverage Dispute");
-
-    insertMatter.run(c4.lastInsertRowid, "MTR-001", "Patent Infringement Defense");
-    insertMatter.run(c4.lastInsertRowid, "MTR-002", "Government Contract Review");
+async function seed() {
+  const c1 = await db.execute({
+    sql: "INSERT INTO clients (client_number, name) VALUES (?, ?)",
+    args: ["CLT-001", "Acme Corporation"],
+  });
+  const c2 = await db.execute({
+    sql: "INSERT INTO clients (client_number, name) VALUES (?, ?)",
+    args: ["CLT-002", "Globex Industries"],
+  });
+  const c3 = await db.execute({
+    sql: "INSERT INTO clients (client_number, name) VALUES (?, ?)",
+    args: ["CLT-003", "Wayne Enterprises"],
+  });
+  const c4 = await db.execute({
+    sql: "INSERT INTO clients (client_number, name) VALUES (?, ?)",
+    args: ["CLT-004", "Stark Industries"],
   });
 
-  seedData();
+  const matters = [
+    [c1.lastInsertRowid, "MTR-001", "Annual Compliance Review 2026"],
+    [c1.lastInsertRowid, "MTR-002", "Contract Dispute — Supplier Agreement"],
+    [c1.lastInsertRowid, "MTR-003", "IP Portfolio Assessment"],
+    [c2.lastInsertRowid, "MTR-001", "Merger Due Diligence"],
+    [c2.lastInsertRowid, "MTR-002", "Environmental Compliance Audit"],
+    [c3.lastInsertRowid, "MTR-001", "Real Estate Acquisition — Gotham Tower"],
+    [c3.lastInsertRowid, "MTR-002", "Employee Benefits Plan Review"],
+    [c3.lastInsertRowid, "MTR-003", "Insurance Coverage Dispute"],
+    [c4.lastInsertRowid, "MTR-001", "Patent Infringement Defense"],
+    [c4.lastInsertRowid, "MTR-002", "Government Contract Review"],
+  ] as const;
+
+  for (const [clientId, matterNumber, description] of matters) {
+    await db.execute({
+      sql: "INSERT INTO matters (client_id, matter_number, description) VALUES (?, ?, ?)",
+      args: [clientId!, matterNumber, description],
+    });
+  }
 }
 
-export function getClients() {
-  const db = getDb();
-  return db
-    .prepare("SELECT id, client_number, name FROM clients ORDER BY client_number")
-    .all() as { id: number; client_number: string; name: string }[];
+export async function getClients() {
+  await ensureInit();
+  const result = await db.execute("SELECT id, client_number, name FROM clients ORDER BY client_number");
+  return result.rows as unknown as { id: number; client_number: string; name: string }[];
 }
 
-export function getMattersForClient(clientId: number) {
-  const db = getDb();
-  return db
-    .prepare(
-      "SELECT id, client_id, matter_number, description FROM matters WHERE client_id = ? ORDER BY matter_number"
-    )
-    .all(clientId) as {
-    id: number;
-    client_id: number;
-    matter_number: string;
-    description: string;
-  }[];
+export async function getMattersForClient(clientId: number) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, client_id, matter_number, description FROM matters WHERE client_id = ? ORDER BY matter_number",
+    args: [clientId],
+  });
+  return result.rows as unknown as { id: number; client_id: number; matter_number: string; description: string }[];
 }
 
-export function getClient(id: number) {
-  const db = getDb();
-  return db
-    .prepare("SELECT id, client_number, name FROM clients WHERE id = ?")
-    .get(id) as { id: number; client_number: string; name: string } | undefined;
+export async function getClient(id: number) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, client_number, name FROM clients WHERE id = ?",
+    args: [id],
+  });
+  return (result.rows[0] as unknown as { id: number; client_number: string; name: string }) || undefined;
 }
 
-export function getMatter(id: number) {
-  const db = getDb();
-  return db
-    .prepare("SELECT id, client_id, matter_number, description FROM matters WHERE id = ?")
-    .get(id) as {
-    id: number;
-    client_id: number;
-    matter_number: string;
-    description: string;
-  } | undefined;
+export async function getMatter(id: number) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, client_id, matter_number, description FROM matters WHERE id = ?",
+    args: [id],
+  });
+  return (result.rows[0] as unknown as { id: number; client_id: number; matter_number: string; description: string }) || undefined;
 }
 
-export function createClient(clientNumber: string, name: string) {
-  const db = getDb();
-  const result = db
-    .prepare("INSERT INTO clients (client_number, name) VALUES (?, ?)")
-    .run(clientNumber, name);
-  return getClient(result.lastInsertRowid as number);
+export async function dbCreateClient(clientNumber: string, name: string) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "INSERT INTO clients (client_number, name) VALUES (?, ?)",
+    args: [clientNumber, name],
+  });
+  return getClient(Number(result.lastInsertRowid));
 }
 
-export function updateClient(id: number, clientNumber: string, name: string) {
-  const db = getDb();
-  db.prepare("UPDATE clients SET client_number = ?, name = ? WHERE id = ?")
-    .run(clientNumber, name, id);
+export async function updateClient(id: number, clientNumber: string, name: string) {
+  await ensureInit();
+  await db.execute({
+    sql: "UPDATE clients SET client_number = ?, name = ? WHERE id = ?",
+    args: [clientNumber, name, id],
+  });
   return getClient(id);
 }
 
-export function deleteClient(id: number) {
-  const db = getDb();
-  // Delete associated matters first
-  db.prepare("DELETE FROM matters WHERE client_id = ?").run(id);
-  db.prepare("DELETE FROM clients WHERE id = ?").run(id);
+export async function deleteClient(id: number) {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM matters WHERE client_id = ?", args: [id] });
+  await db.execute({ sql: "DELETE FROM clients WHERE id = ?", args: [id] });
 }
 
-export function createMatter(clientId: number, matterNumber: string, description: string) {
-  const db = getDb();
-  const result = db
-    .prepare("INSERT INTO matters (client_id, matter_number, description) VALUES (?, ?, ?)")
-    .run(clientId, matterNumber, description);
-  return getMatter(result.lastInsertRowid as number);
+export async function dbCreateMatter(clientId: number, matterNumber: string, description: string) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "INSERT INTO matters (client_id, matter_number, description) VALUES (?, ?, ?)",
+    args: [clientId, matterNumber, description],
+  });
+  return getMatter(Number(result.lastInsertRowid));
 }
 
-export function updateMatter(id: number, matterNumber: string, description: string) {
-  const db = getDb();
-  db.prepare("UPDATE matters SET matter_number = ?, description = ? WHERE id = ?")
-    .run(matterNumber, description, id);
+export async function updateMatter(id: number, matterNumber: string, description: string) {
+  await ensureInit();
+  await db.execute({
+    sql: "UPDATE matters SET matter_number = ?, description = ? WHERE id = ?",
+    args: [matterNumber, description, id],
+  });
   return getMatter(id);
 }
 
-export function deleteMatter(id: number) {
-  const db = getDb();
-  db.prepare("DELETE FROM matters WHERE id = ?").run(id);
+export async function deleteMatter(id: number) {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM matters WHERE id = ?", args: [id] });
 }
 
-export function getAllMatters() {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT m.id, m.client_id, m.matter_number, m.description, c.client_number, c.name as client_name
-       FROM matters m JOIN clients c ON m.client_id = c.id
-       ORDER BY c.client_number, m.matter_number`
-    )
-    .all() as {
+export async function getAllMatters() {
+  await ensureInit();
+  const result = await db.execute(
+    `SELECT m.id, m.client_id, m.matter_number, m.description, c.client_number, c.name as client_name
+     FROM matters m JOIN clients c ON m.client_id = c.id
+     ORDER BY c.client_number, m.matter_number`
+  );
+  return result.rows as unknown as {
     id: number;
     client_id: number;
     matter_number: string;

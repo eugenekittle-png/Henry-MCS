@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
     const clientId = formData.get("clientId");
     const matterId = formData.get("matterId");
     if (clientId && matterId) {
-      const client = getClient(parseInt(clientId as string, 10));
-      const matter = getMatter(parseInt(matterId as string, 10));
+      const client = await getClient(parseInt(clientId as string, 10));
+      const matter = await getMatter(parseInt(matterId as string, 10));
       if (client && matter) {
         contextPrefix = `This analysis is for Client: ${client.name} (${client.client_number}), Matter: ${matter.description} (${matter.matter_number}).\n\n`;
       }
