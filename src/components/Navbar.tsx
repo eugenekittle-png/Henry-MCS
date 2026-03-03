@@ -21,13 +21,20 @@ export default function Navbar() {
         </Link>
         <div className="flex gap-2">
           <Link href="/summary" className={linkClass("/summary")}>
-            Document Summary
+            Summary
           </Link>
           <Link href="/breakdown" className={linkClass("/breakdown")}>
-            Document Breakdown
+            Breakdown
           </Link>
           <Link href="/compare" className={linkClass("/compare")}>
-            Document Compare
+            Compare
+          </Link>
+          <span className="w-px bg-gray-700 mx-1" />
+          <Link href="/clients" className={linkClass("/clients")}>
+            Clients
+          </Link>
+          <Link href="/matters" className={linkClass("/matters")}>
+            Matters
           </Link>
         </div>
       </div>

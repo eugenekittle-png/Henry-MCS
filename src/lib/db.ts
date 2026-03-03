@@ -118,3 +118,63 @@ export function getMatter(id: number) {
     description: string;
   } | undefined;
 }
+
+export function createClient(clientNumber: string, name: string) {
+  const db = getDb();
+  const result = db
+    .prepare("INSERT INTO clients (client_number, name) VALUES (?, ?)")
+    .run(clientNumber, name);
+  return getClient(result.lastInsertRowid as number);
+}
+
+export function updateClient(id: number, clientNumber: string, name: string) {
+  const db = getDb();
+  db.prepare("UPDATE clients SET client_number = ?, name = ? WHERE id = ?")
+    .run(clientNumber, name, id);
+  return getClient(id);
+}
+
+export function deleteClient(id: number) {
+  const db = getDb();
+  // Delete associated matters first
+  db.prepare("DELETE FROM matters WHERE client_id = ?").run(id);
+  db.prepare("DELETE FROM clients WHERE id = ?").run(id);
+}
+
+export function createMatter(clientId: number, matterNumber: string, description: string) {
+  const db = getDb();
+  const result = db
+    .prepare("INSERT INTO matters (client_id, matter_number, description) VALUES (?, ?, ?)")
+    .run(clientId, matterNumber, description);
+  return getMatter(result.lastInsertRowid as number);
+}
+
+export function updateMatter(id: number, matterNumber: string, description: string) {
+  const db = getDb();
+  db.prepare("UPDATE matters SET matter_number = ?, description = ? WHERE id = ?")
+    .run(matterNumber, description, id);
+  return getMatter(id);
+}
+
+export function deleteMatter(id: number) {
+  const db = getDb();
+  db.prepare("DELETE FROM matters WHERE id = ?").run(id);
+}
+
+export function getAllMatters() {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT m.id, m.client_id, m.matter_number, m.description, c.client_number, c.name as client_name
+       FROM matters m JOIN clients c ON m.client_id = c.id
+       ORDER BY c.client_number, m.matter_number`
+    )
+    .all() as {
+    id: number;
+    client_id: number;
+    matter_number: string;
+    description: string;
+    client_number: string;
+    client_name: string;
+  }[];
+}
