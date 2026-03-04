@@ -5,6 +5,7 @@ import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import StreamingResponse from "@/components/StreamingResponse";
 import ClientMatterSelect from "@/components/ClientMatterSelect";
+import NetDocumentsButton from "@/components/NetDocumentsButton";
 import type { Client, Matter } from "@/types";
 
 export default function SummaryPage() {
@@ -112,6 +113,7 @@ export default function SummaryPage() {
           onClear={handleClientMatterClear}
         />
         <FileDropZone onFiles={handleFiles} />
+        <NetDocumentsButton onFiles={handleFiles} mode="multiple" />
         <FileList files={files} onRemove={handleRemove} />
 
         {canSubmit && (
