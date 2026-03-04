@@ -51,7 +51,7 @@ export default function Home() {
             summaries, themes, and connections between files.
           </p>
           <p className="text-sm text-gray-400 mt-4">
-            Upload a .zip containing supported document types
+            Supports ZIP
           </p>
         </Link>
 

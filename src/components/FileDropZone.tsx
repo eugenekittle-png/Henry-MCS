@@ -99,8 +99,10 @@ export default function FileDropZone({
         </svg>
         <p className="text-gray-600 font-medium">{label}</p>
         <p className="text-gray-400 text-sm mt-1">
-          Supported: PDF, DOCX, XLSX, PPTX, TXT, MD, CSV
-          {accept?.includes(".zip") ? ", ZIP" : ""} (max 10MB)
+          {accept
+            ? `Supported: ${accept.split(",").map((e) => e.trim().replace(".", "").toUpperCase()).join(", ")}`
+            : "Supported: PDF, DOCX, XLSX, PPTX, TXT, MD, CSV"}{" "}
+          (max 10MB)
         </p>
         <input
           ref={inputRef}
