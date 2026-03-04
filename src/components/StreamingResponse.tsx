@@ -37,7 +37,7 @@ export default function StreamingResponse({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "analysis.docx";
+    a.download = "analysis.pdf";
     a.click();
     URL.revokeObjectURL(url);
   }, [content, clientMatter]);
