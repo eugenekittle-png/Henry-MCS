@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
       const text = await res.text();
       console.error("NetDocuments token exchange failed:", res.status, text);
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-      return NextResponse.redirect(`${appUrl}${returnUrl}?nd_error=token_exchange`);
+      const detail = encodeURIComponent(`${res.status}: ${text.slice(0, 200)}`);
+      return NextResponse.redirect(`${appUrl}${returnUrl}?nd_error=token_exchange&nd_detail=${detail}`);
     }
 
     const data = await res.json();
