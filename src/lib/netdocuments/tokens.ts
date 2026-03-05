@@ -72,13 +72,16 @@ export async function refreshTokenIfNeeded(tokens: NetDocTokens): Promise<NetDoc
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: tokens.refresh_token,
-    client_id: ND_CLIENT_ID,
-    client_secret: ND_CLIENT_SECRET,
   });
+
+  const basicAuth = Buffer.from(`${ND_CLIENT_ID}:${ND_CLIENT_SECRET}`).toString("base64");
 
   const res = await fetch(ND_TOKEN_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${basicAuth}`,
+    },
     body: body.toString(),
   });
 

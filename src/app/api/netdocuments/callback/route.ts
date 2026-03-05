@@ -32,20 +32,23 @@ export async function GET(request: NextRequest) {
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      client_id: ND_CLIENT_ID,
-      client_secret: ND_CLIENT_SECRET,
       redirect_uri: getRedirectUri(),
     });
 
+    const basicAuth = Buffer.from(`${ND_CLIENT_ID}:${ND_CLIENT_SECRET}`).toString("base64");
+
     const res = await fetch(ND_TOKEN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${basicAuth}`,
+      },
       body: body.toString(),
     });
 
     if (!res.ok) {
       const text = await res.text();
-      console.error("NetDocuments token exchange failed:", text);
+      console.error("NetDocuments token exchange failed:", res.status, text);
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       return NextResponse.redirect(`${appUrl}${returnUrl}?nd_error=token_exchange`);
     }
