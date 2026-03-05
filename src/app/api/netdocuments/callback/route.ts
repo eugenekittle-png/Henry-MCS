@@ -32,16 +32,16 @@ export async function GET(request: NextRequest) {
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       code,
+      client_id: ND_CLIENT_ID,
+      client_secret: ND_CLIENT_SECRET,
       redirect_uri: getRedirectUri(),
+      scope: "read",
     });
-
-    const basicAuth = Buffer.from(`${ND_CLIENT_ID}:${ND_CLIENT_SECRET}`).toString("base64");
 
     const res = await fetch(ND_TOKEN_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${basicAuth}`,
       },
       body: body.toString(),
     });
