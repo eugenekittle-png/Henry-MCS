@@ -5,7 +5,6 @@ import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import StreamingResponse from "@/components/StreamingResponse";
 import ClientMatterSelect from "@/components/ClientMatterSelect";
-import NetDocumentsButton from "@/components/NetDocumentsButton";
 import DiffDisplay from "@/components/DiffDisplay";
 import type { DiffLine } from "@/components/DiffDisplay";
 import type { Client, Matter } from "@/types";
@@ -209,9 +208,6 @@ export default function ComparePage() {
               multiple={false}
               label="Drop first file here"
             />
-            <div className="mt-2">
-              <NetDocumentsButton onFiles={handleFile1} mode="single" accept={[".pdf", ".doc", ".docx"]} />
-            </div>
             {file1 && (
               <FileList files={[file1]} onRemove={() => setFile1(null)} />
             )}
@@ -224,9 +220,6 @@ export default function ComparePage() {
               multiple={false}
               label="Drop second file here"
             />
-            <div className="mt-2">
-              <NetDocumentsButton onFiles={handleFile2} mode="single" accept={[".pdf", ".doc", ".docx"]} />
-            </div>
             {file2 && (
               <FileList files={[file2]} onRemove={() => setFile2(null)} />
             )}

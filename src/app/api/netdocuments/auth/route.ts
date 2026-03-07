@@ -34,8 +34,7 @@ export async function GET(request: NextRequest) {
     scope: "read",
     response_type: "code",
     redirect_uri: getRedirectUri(),
-    state,
   });
-
+console.log("Auth",params);
   return NextResponse.redirect(`${ND_AUTH_URL}?${params}`);
 }

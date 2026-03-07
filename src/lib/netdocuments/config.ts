@@ -14,6 +14,6 @@ export const ND_COOKIE_MAX_AGE = 90 * 24 * 60 * 60; // 90 days in seconds
 export const ND_TOKEN_REFRESH_BUFFER = 5 * 60 * 1000; // 5 minutes in ms
 
 export function getRedirectUri(): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  return `${appUrl}/api/netdocuments/callback`;
+  if (process.env.ND_REDIRECT_URI) return process.env.ND_REDIRECT_URI;
+  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost";
 }

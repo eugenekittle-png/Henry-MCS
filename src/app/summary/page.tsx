@@ -4,8 +4,8 @@ import { useState, useCallback } from "react";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import StreamingResponse from "@/components/StreamingResponse";
+import SummaryChat from "@/components/SummaryChat";
 import ClientMatterSelect from "@/components/ClientMatterSelect";
-import NetDocumentsButton from "@/components/NetDocumentsButton";
 import type { Client, Matter } from "@/types";
 
 export default function SummaryPage() {
@@ -113,8 +113,7 @@ export default function SummaryPage() {
           onClear={handleClientMatterClear}
         />
         <FileDropZone onFiles={handleFiles} />
-        <NetDocumentsButton onFiles={handleFiles} mode="multiple" />
-        <FileList files={files} onRemove={handleRemove} />
+<FileList files={files} onRemove={handleRemove} />
 
         {canSubmit && (
           <button
@@ -151,6 +150,13 @@ export default function SummaryPage() {
             matterNumber: selectedMatter.matter_number,
           } : null}
         />
+
+        {content && !isStreaming && !error && (
+          <SummaryChat
+            summaryContent={content}
+            documentNames={files.map((f) => f.name)}
+          />
+        )}
       </div>
     </div>
   );
