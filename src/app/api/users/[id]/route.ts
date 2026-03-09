@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, hashPassword } from "@/lib/auth";
 import { getUser, updateUserRole, updateUserPassword, deleteUser } from "@/lib/db";
 import { validatePassword } from "@/lib/password";
+import { logAction } from "@/lib/audit";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
@@ -17,12 +18,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const { role, password } = await request.json();
+  const changes: Record<string, unknown> = { targetUser: user.username };
 
   if (role && role !== user.role) {
     if (role !== "admin" && role !== "user") {
       return NextResponse.json({ error: "Role must be 'admin' or 'user'" }, { status: 400 });
     }
     await updateUserRole(userId, role);
+    changes.roleChanged = { from: user.role, to: role };
   }
 
   if (password) {
@@ -32,8 +35,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
     const passwordHash = await hashPassword(password);
     await updateUserPassword(userId, passwordHash, true);
+    changes.passwordReset = true;
   }
 
+  await logAction({ username: session.username, action: "user_update", details: changes, success: true });
   const updated = await getUser(userId);
   return NextResponse.json(updated);
 }
@@ -57,5 +62,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
 
   await deleteUser(userId);
+  await logAction({ username: session.username, action: "user_delete", details: { targetUser: user.username }, success: true });
   return NextResponse.json({ ok: true });
 }

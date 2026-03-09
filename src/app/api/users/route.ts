@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, hashPassword } from "@/lib/auth";
 import { getAllUsers, dbCreateUser, getUserByUsername } from "@/lib/db";
 import { validatePassword } from "@/lib/password";
+import { logAction } from "@/lib/audit";
 
 export async function GET() {
   const session = await getSession();
@@ -38,5 +39,6 @@ export async function POST(request: NextRequest) {
 
   const passwordHash = await hashPassword(password);
   const user = await dbCreateUser(username, passwordHash, role);
+  await logAction({ username: session.username, action: "user_create", details: { targetUser: username.toLowerCase(), role }, success: true });
   return NextResponse.json(user, { status: 201 });
 }

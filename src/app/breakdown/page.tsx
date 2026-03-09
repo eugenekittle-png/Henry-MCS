@@ -5,6 +5,7 @@ import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import StreamingResponse from "@/components/StreamingResponse";
 import ClientMatterSelect from "@/components/ClientMatterSelect";
+import SummaryChat from "@/components/SummaryChat";
 import type { Client, Matter } from "@/types";
 
 export default function BreakdownPage() {
@@ -100,7 +101,7 @@ export default function BreakdownPage() {
   }, [files, selectedClient, selectedMatter]);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
+    <div className="max-w-5xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Document Breakdown</h1>
       <p className="text-gray-600 mb-6">
         Upload a zip file of documents to get an organized catalog and analysis.
@@ -154,6 +155,13 @@ export default function BreakdownPage() {
             matterNumber: selectedMatter.matter_number,
           } : null}
         />
+
+        {content && !isStreaming && (
+          <SummaryChat
+            summaryContent={content}
+            documentNames={files.map(f => f.name)}
+          />
+        )}
       </div>
     </div>
   );

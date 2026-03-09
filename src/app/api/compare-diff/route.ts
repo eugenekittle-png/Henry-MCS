@@ -2,6 +2,9 @@ import { NextRequest } from "next/server";
 import { diffLines } from "diff";
 import { parseFile } from "@/lib/parsers";
 import { MAX_FILE_SIZE, COMPARE_EXTENSIONS } from "@/lib/constants";
+import { getClient, getMatter } from "@/lib/db";
+import { getSession } from "@/lib/auth";
+import { logAction } from "@/lib/audit";
 
 export interface DiffLine {
   type: "added" | "removed" | "unchanged";
@@ -9,6 +12,8 @@ export interface DiffLine {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getSession();
+
   try {
     const formData = await req.formData();
     const file1 = formData.get("file1") as File | null;
@@ -45,7 +50,6 @@ export async function POST(req: NextRequest) {
     const lines: DiffLine[] = [];
     for (const change of changes) {
       const changeLines = change.value.split("\n");
-      // Remove trailing empty string from split
       if (changeLines[changeLines.length - 1] === "") {
         changeLines.pop();
       }
@@ -55,13 +59,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return Response.json({
-      file1Name: file1.name,
-      file2Name: file2.name,
-      lines,
-    });
+    const added = lines.filter(l => l.type === "added").length;
+    const removed = lines.filter(l => l.type === "removed").length;
+
+    const details: Record<string, unknown> = { file1: file1.name, file2: file2.name, linesAdded: added, linesRemoved: removed };
+    let clientNumber: string | null = null;
+    let matterNumber: string | null = null;
+    const clientId = formData.get("clientId");
+    const matterId = formData.get("matterId");
+    if (clientId && matterId) {
+      const client = await getClient(parseInt(clientId as string, 10));
+      const matter = await getMatter(parseInt(matterId as string, 10));
+      if (client && matter) {
+        clientNumber = client.client_number;
+        matterNumber = matter.matter_number;
+      }
+    }
+
+    await logAction({ username: session?.username ?? null, action: "compare_diff", clientNumber, matterNumber, details, success: true });
+
+    return Response.json({ file1Name: file1.name, file2Name: file2.name, lines });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
+    await logAction({ username: session?.username ?? null, action: "compare_diff", details: { error: message }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }

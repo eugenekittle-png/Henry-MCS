@@ -30,7 +30,7 @@ export default function Navbar() {
         : "text-gray-300 hover:text-white hover:bg-white/10"
     }`;
 
-  const isAdminPage = ["/clients", "/matters", "/users"].includes(pathname);
+  const isAdminPage = ["/clients", "/matters", "/users", "/audit", "/usage"].includes(pathname);
 
   const dropdownLinkClass = (path: string) =>
     `block px-4 py-2 text-sm transition-colors ${
@@ -42,8 +42,14 @@ export default function Navbar() {
   return (
     <nav className="bg-gray-900 border-b border-gray-800">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="text-white font-bold text-lg">
-          Henry MCS
+        <Link href="/" className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/henry-mcs.png"
+            alt="Henry MCS"
+            style={{ height: "36px", width: "auto" }}
+          />
+          <span className="text-white font-bold text-lg">Henry MCS</span>
         </Link>
         <div className="flex items-center gap-2">
           <Link href="/summary" className={linkClass("/summary")}>
@@ -100,13 +106,34 @@ export default function Navbar() {
                     >
                       Matters
                     </Link>
+                    <div className="border-t border-gray-100 my-1" />
+                    <Link
+                      href="/audit"
+                      className={dropdownLinkClass("/audit")}
+                      onClick={() => setAdminOpen(false)}
+                    >
+                      Audit Log
+                    </Link>
+                    <Link
+                      href="/usage"
+                      className={dropdownLinkClass("/usage")}
+                      onClick={() => setAdminOpen(false)}
+                    >
+                      Usage & Cost
+                    </Link>
                   </div>
                 )}
               </div>
             </>
           )}
           <span className="w-px bg-gray-700 mx-1" />
-          <span className="text-gray-400 text-xs px-2">{user.username}</span>
+          <Link
+            href="/my-usage"
+            className="text-gray-400 hover:text-white text-xs px-2 transition-colors"
+            title="My Usage"
+          >
+            {user.username}
+          </Link>
           <button
             onClick={logout}
             className="px-3 py-2 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 transition-colors"

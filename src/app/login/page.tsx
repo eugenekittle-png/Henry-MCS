@@ -45,7 +45,11 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
-          <h1 className="text-2xl font-bold text-gray-900 text-center mb-1">Henry MCS</h1>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/images/henry-mcs.png" alt="Henry MCS" style={{ height: "36px", width: "auto" }} />
+            <h1 className="text-2xl font-bold text-gray-900">Henry MCS</h1>
+          </div>
           <p className="text-sm text-gray-500 text-center mb-8">Sign in to continue</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

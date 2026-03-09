@@ -46,6 +46,31 @@ async function ensureInit() {
     // column already exists
   }
 
+  // Create audit_logs table if missing
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT DEFAULT (datetime('now')),
+      username TEXT,
+      action TEXT NOT NULL,
+      client_number TEXT,
+      matter_number TEXT,
+      details TEXT,
+      tokens_input INTEGER,
+      tokens_output INTEGER,
+      success INTEGER NOT NULL DEFAULT 1
+    )
+  `);
+
+  // Migrate: add client_number / matter_number columns to existing audit_logs tables
+  for (const col of ["client_number", "matter_number"]) {
+    try {
+      await db.execute(`ALTER TABLE audit_logs ADD COLUMN ${col} TEXT`);
+    } catch {
+      // column already exists
+    }
+  }
+
   // Seed users if empty
   const userCount = await db.execute("SELECT COUNT(*) as count FROM users");
   if ((userCount.rows[0].count as number) === 0) {
@@ -245,6 +270,176 @@ export async function updateUserPassword(id: number, passwordHash: string, mustC
 export async function deleteUser(id: number) {
   await ensureInit();
   await db.execute({ sql: "DELETE FROM users WHERE id = ?", args: [id] });
+}
+
+export async function insertAuditLog(params: {
+  username: string | null;
+  action: string;
+  clientNumber?: string | null;
+  matterNumber?: string | null;
+  details?: Record<string, unknown>;
+  tokensInput?: number;
+  tokensOutput?: number;
+  success: boolean;
+}) {
+  await ensureInit();
+  await db.execute({
+    sql: `INSERT INTO audit_logs (username, action, client_number, matter_number, details, tokens_input, tokens_output, success)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      params.username ?? null,
+      params.action,
+      params.clientNumber ?? null,
+      params.matterNumber ?? null,
+      params.details ? JSON.stringify(params.details) : null,
+      params.tokensInput ?? null,
+      params.tokensOutput ?? null,
+      params.success ? 1 : 0,
+    ],
+  });
+}
+
+export async function getAuditLogs(limit = 200, offset = 0) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `SELECT id, created_at, username, action, client_number, matter_number, details, tokens_input, tokens_output, success
+          FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?`,
+    args: [limit, offset],
+  });
+  return result.rows as unknown as {
+    id: number;
+    created_at: string;
+    username: string | null;
+    action: string;
+    client_number: string | null;
+    matter_number: string | null;
+    details: string | null;
+    tokens_input: number | null;
+    tokens_output: number | null;
+    success: number;
+  }[];
+}
+
+export async function getAuditLogCount() {
+  await ensureInit();
+  const result = await db.execute("SELECT COUNT(*) as count FROM audit_logs");
+  return result.rows[0].count as number;
+}
+
+export async function getUsageByUser() {
+  await ensureInit();
+  const result = await db.execute(`
+    SELECT
+      COALESCE(username, '(unknown)') as label,
+      COUNT(*) as total_requests,
+      SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+      COALESCE(SUM(tokens_input), 0) as total_input,
+      COALESCE(SUM(tokens_output), 0) as total_output
+    FROM audit_logs
+    GROUP BY COALESCE(username, '(unknown)')
+    ORDER BY total_input + total_output DESC
+  `);
+  return result.rows as unknown as UsageRow[];
+}
+
+export async function getUsageByClient() {
+  await ensureInit();
+  const result = await db.execute(`
+    SELECT
+      COALESCE(client_number, '(none)') as label,
+      COUNT(*) as total_requests,
+      SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+      COALESCE(SUM(tokens_input), 0) as total_input,
+      COALESCE(SUM(tokens_output), 0) as total_output
+    FROM audit_logs
+    GROUP BY COALESCE(client_number, '(none)')
+    ORDER BY total_input + total_output DESC
+  `);
+  return result.rows as unknown as UsageRow[];
+}
+
+export async function getUsageByMatter() {
+  await ensureInit();
+  const result = await db.execute(`
+    SELECT
+      COALESCE(client_number, '(none)') || ' / ' || COALESCE(matter_number, '(none)') as label,
+      COUNT(*) as total_requests,
+      SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+      COALESCE(SUM(tokens_input), 0) as total_input,
+      COALESCE(SUM(tokens_output), 0) as total_output
+    FROM audit_logs
+    GROUP BY COALESCE(client_number, '(none)'), COALESCE(matter_number, '(none)')
+    ORDER BY total_input + total_output DESC
+  `);
+  return result.rows as unknown as UsageRow[];
+}
+
+export interface UsageRow {
+  label: string;
+  total_requests: number;
+  ai_requests: number;
+  total_input: number;
+  total_output: number;
+}
+
+export async function getUsageForUser(username: string) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `
+      SELECT
+        action as label,
+        COUNT(*) as total_requests,
+        SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+        COALESCE(SUM(tokens_input), 0) as total_input,
+        COALESCE(SUM(tokens_output), 0) as total_output
+      FROM audit_logs
+      WHERE LOWER(username) = LOWER(?)
+      GROUP BY action
+      ORDER BY total_input + total_output DESC
+    `,
+    args: [username],
+  });
+  return result.rows as unknown as UsageRow[];
+}
+
+export async function getUsageForUserByClient(username: string) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `
+      SELECT
+        COALESCE(client_number, '(none)') as label,
+        COUNT(*) as total_requests,
+        SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+        COALESCE(SUM(tokens_input), 0) as total_input,
+        COALESCE(SUM(tokens_output), 0) as total_output
+      FROM audit_logs
+      WHERE LOWER(username) = LOWER(?)
+      GROUP BY COALESCE(client_number, '(none)')
+      ORDER BY total_input + total_output DESC
+    `,
+    args: [username],
+  });
+  return result.rows as unknown as UsageRow[];
+}
+
+export async function getUsageForUserByMatter(username: string) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `
+      SELECT
+        COALESCE(client_number, '(none)') || ' / ' || COALESCE(matter_number, '(none)') as label,
+        COUNT(*) as total_requests,
+        SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+        COALESCE(SUM(tokens_input), 0) as total_input,
+        COALESCE(SUM(tokens_output), 0) as total_output
+      FROM audit_logs
+      WHERE LOWER(username) = LOWER(?)
+      GROUP BY COALESCE(client_number, '(none)'), COALESCE(matter_number, '(none)')
+      ORDER BY total_input + total_output DESC
+    `,
+    args: [username],
+  });
+  return result.rows as unknown as UsageRow[];
 }
 
 export async function getAllMatters() {
