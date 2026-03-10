@@ -13,8 +13,21 @@ type View = "summarize" | "chat";
 interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
 
-async function copyToClipboard(text: string) {
-  await navigator.clipboard.writeText(text);
+async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  // Fallback for Office WebView2 where clipboard API may be unavailable
+  const el = document.createElement("textarea");
+  el.value = text;
+  el.style.cssText = "position:fixed;opacity:0;pointer-events:none;";
+  document.body.appendChild(el);
+  el.focus();
+  el.select();
+  const ok = document.execCommand("copy");
+  document.body.removeChild(el);
+  if (!ok) throw new Error("Copy failed");
 }
 
 export default function WordAddinPage() {
@@ -37,10 +50,15 @@ export default function WordAddinPage() {
   const [copied, setCopied] = useState<string | null>(null);
 
   function handleCopy(text: string, key: string) {
-    copyToClipboard(text).then(() => {
-      setCopied(key);
-      setTimeout(() => setCopied(null), 1500);
-    });
+    copyToClipboard(text)
+      .then(() => {
+        setCopied(key);
+        setTimeout(() => setCopied(null), 1500);
+      })
+      .catch(() => {
+        setCopied(`${key}-error`);
+        setTimeout(() => setCopied(null), 2000);
+      });
   }
 
   // Chat state
@@ -368,7 +386,7 @@ export default function WordAddinPage() {
                           <button
                             onClick={() => handleCopy(citationsToMarkdown(citations), "summary-citations")}
                             className="text-xs font-semibold text-white bg-gray-800 hover:bg-gray-900 px-2 py-0.5 rounded transition-colors"
-                          >{copied === "summary-citations" ? "Copied!" : "Copy"}</button>
+                          >{copied === "summary-citations" ? "Copied!" : copied === "summary-citations-error" ? "Failed" : "Copy"}</button>
                         </div>
                         <div className="space-y-2">
                           {citations.map(c => (
@@ -398,7 +416,7 @@ export default function WordAddinPage() {
                           onClick={() => handleCopy(hasCitations ? main : content, "summary")}
                           className="bg-gray-800 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-900"
                         >
-                          {copied === "summary" ? "Copied!" : "Copy"}
+                          {copied === "summary" ? "Copied!" : copied === "summary-error" ? "Failed" : "Copy"}
                         </button>
                       </div>
                     )}
@@ -439,7 +457,7 @@ export default function WordAddinPage() {
                                     <button
                                       onClick={() => handleCopy(citationsToMarkdown(msgCitations), `chat-citations-${i}`)}
                                       className="text-xs font-semibold text-white bg-gray-800 hover:bg-gray-900 px-2 py-0.5 rounded transition-colors"
-                                    >{copied === `chat-citations-${i}` ? "Copied!" : "Copy"}</button>
+                                    >{copied === `chat-citations-${i}` ? "Copied!" : copied === `chat-citations-${i}-error` ? "Failed" : "Copy"}</button>
                                   </div>
                                   <div className="space-y-1.5">
                                     {msgCitations.map(c => (
