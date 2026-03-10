@@ -55,8 +55,9 @@ export default function WordAddinPage() {
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then(r => r.json())
-      .then(d => { if (d.username) setUser({ username: d.username, role: d.role }); })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.user?.username) setUser({ username: d.user.username, role: d.user.role }); })
+      .catch(() => {})
       .finally(() => setAuthLoading(false));
   }, []);
 
@@ -136,8 +137,9 @@ export default function WordAddinPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Request failed");
+        let errMsg = `Request failed (${res.status})`;
+        try { const data = await res.json(); if (data.error) errMsg = data.error; } catch { /* non-JSON response */ }
+        throw new Error(errMsg);
       }
 
       const reader = res.body?.getReader();
@@ -193,7 +195,7 @@ export default function WordAddinPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: apiMessages }),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed"); }
+      if (!res.ok) { let m = `Failed (${res.status})`; try { const d = await res.json(); if (d.error) m = d.error; } catch { /* non-JSON */ } throw new Error(m); }
 
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No stream");
