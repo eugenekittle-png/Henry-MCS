@@ -30,7 +30,7 @@ export default function Navbar() {
         : "text-gray-300 hover:text-white hover:bg-white/10"
     }`;
 
-  const isAdminPage = ["/clients", "/matters", "/users", "/audit", "/usage"].includes(pathname);
+  const isAdminPage = ["/clients", "/matters", "/users", "/audit", "/usage", "/playbooks"].includes(pathname);
 
   const dropdownLinkClass = (path: string) =>
     `block px-4 py-2 text-sm transition-colors ${
@@ -60,6 +60,9 @@ export default function Navbar() {
           </Link>
           <Link href="/compare" className={linkClass("/compare")}>
             Compare
+          </Link>
+          <Link href="/review" className={linkClass("/review")}>
+            Review
           </Link>
           {user.role === "admin" && (
             <>
@@ -105,6 +108,13 @@ export default function Navbar() {
                       onClick={() => setAdminOpen(false)}
                     >
                       Matters
+                    </Link>
+                    <Link
+                      href="/playbooks"
+                      className={dropdownLinkClass("/playbooks")}
+                      onClick={() => setAdminOpen(false)}
+                    >
+                      Playbooks
                     </Link>
                     <div className="border-t border-gray-100 my-1" />
                     <Link
