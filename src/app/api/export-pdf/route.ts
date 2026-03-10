@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       if (line.trim().startsWith("|")) {
         const cells = line.split("|").slice(1, -1);
         // Skip separator rows (---|---|---)
-        if (cells.every(c => /^[-: ]+$/.test(c))) continue;
+        if (cells.every((c: string) => /^[-: ]+$/.test(c))) continue;
         inTable = true;
         tableRows.push(cells);
         continue;
