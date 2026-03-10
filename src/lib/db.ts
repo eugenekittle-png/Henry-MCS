@@ -326,6 +326,55 @@ export async function getAuditLogCount() {
   return result.rows[0].count as number;
 }
 
+export async function getAuditLogsFiltered(params: {
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  await ensureInit();
+  const { from, to, limit = 200, offset = 0 } = params;
+  const conditions: string[] = [];
+  const args: (string | number)[] = [];
+
+  if (from) { conditions.push("created_at >= ?"); args.push(from); }
+  if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  args.push(limit, offset);
+
+  const result = await db.execute({
+    sql: `SELECT id, created_at, username, action, client_number, matter_number, tokens_input, tokens_output, success
+          FROM audit_logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+    args,
+  });
+  return result.rows as unknown as {
+    id: number;
+    created_at: string;
+    username: string | null;
+    action: string;
+    client_number: string | null;
+    matter_number: string | null;
+    tokens_input: number | null;
+    tokens_output: number | null;
+    success: number;
+  }[];
+}
+
+export async function getAuditLogsFilteredCount(params: { from?: string; to?: string }) {
+  await ensureInit();
+  const { from, to } = params;
+  const conditions: string[] = [];
+  const args: string[] = [];
+
+  if (from) { conditions.push("created_at >= ?"); args.push(from); }
+  if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const result = await db.execute({ sql: `SELECT COUNT(*) as count FROM audit_logs ${where}`, args });
+  return result.rows[0].count as number;
+}
+
 export async function getUsageByUser() {
   await ensureInit();
   const result = await db.execute(`
