@@ -21,7 +21,7 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (!user) return null;
+  if (!user || pathname.startsWith("/word-addin")) return null;
 
   const linkClass = (path: string) =>
     `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${

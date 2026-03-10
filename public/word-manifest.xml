@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="TaskPaneApp">
+
+  <Id>e9f3c2b1-7a4d-4e8f-b2c5-1a9d3f7e2b6c</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Henry MCS</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+
+  <DisplayName DefaultValue="Henry MCS" />
+  <Description DefaultValue="AI-powered document summarization and analysis for legal professionals." />
+  <IconUrl DefaultValue="https://henry-mcs.vercel.app/images/henry-mcs.png" />
+  <HighResolutionIconUrl DefaultValue="https://henry-mcs.vercel.app/images/henry-mcs.png" />
+  <SupportUrl DefaultValue="https://henry-mcs.vercel.app" />
+
+  <AppDomains>
+    <AppDomain>https://henry-mcs.vercel.app</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Document" />
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://henry-mcs.vercel.app/word-addin" />
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+</OfficeApp>
