@@ -329,14 +329,16 @@ export async function getAuditLogCount() {
 export async function getAuditLogsFiltered(params: {
   from?: string;
   to?: string;
+  username?: string;
   limit?: number;
   offset?: number;
 }) {
   await ensureInit();
-  const { from, to, limit = 200, offset = 0 } = params;
+  const { from, to, username, limit = 200, offset = 0 } = params;
   const conditions: string[] = [];
   const args: (string | number)[] = [];
 
+  if (username) { conditions.push("LOWER(username) = LOWER(?)"); args.push(username); }
   if (from) { conditions.push("created_at >= ?"); args.push(from); }
   if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
 
@@ -361,12 +363,13 @@ export async function getAuditLogsFiltered(params: {
   }[];
 }
 
-export async function getAuditLogsFilteredCount(params: { from?: string; to?: string }) {
+export async function getAuditLogsFilteredCount(params: { from?: string; to?: string; username?: string }) {
   await ensureInit();
-  const { from, to } = params;
+  const { from, to, username } = params;
   const conditions: string[] = [];
   const args: string[] = [];
 
+  if (username) { conditions.push("LOWER(username) = LOWER(?)"); args.push(username); }
   if (from) { conditions.push("created_at >= ?"); args.push(from); }
   if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
 

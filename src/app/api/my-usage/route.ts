@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getUsageForUser, getUsageForUserByClient, getUsageForUserByMatter } from "@/lib/db";
+import { getUsageForUser, getUsageForUserByClient, getUsageForUserByMatter, getAuditLogsFiltered, getAuditLogsFilteredCount } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -8,7 +8,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const groupBy = request.nextUrl.searchParams.get("groupBy") ?? "action";
+  const { searchParams } = request.nextUrl;
+  const groupBy = searchParams.get("groupBy") ?? "action";
+
+  if (groupBy === "log") {
+    const from = searchParams.get("from") ?? undefined;
+    const to = searchParams.get("to") ?? undefined;
+    const page = Math.max(0, parseInt(searchParams.get("page") ?? "0", 10));
+    const limit = 100;
+    const offset = page * limit;
+    const [rows, total] = await Promise.all([
+      getAuditLogsFiltered({ username: session.username, from, to, limit, offset }),
+      getAuditLogsFilteredCount({ username: session.username, from, to }),
+    ]);
+    return NextResponse.json({ username: session.username, rows, total, page, limit });
+  }
 
   let rows;
   if (groupBy === "client") {
