@@ -15,8 +15,9 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const files = formData.getAll("files") as File[];
 
-    if (!files.length) {
-      return Response.json({ error: "No files provided" }, { status: 400 });
+    const hasEdgar = !!formData.get("edgarFilings");
+    if (!files.length && !hasEdgar) {
+      return Response.json({ error: "No files or EDGAR filings provided" }, { status: 400 });
     }
 
     const documentTexts: string[] = [];
@@ -33,10 +34,34 @@ export async function POST(req: NextRequest) {
       documentTexts.push(`=== ${file.name} ===\n${text}`);
     }
 
+    // Fetch EDGAR filings if provided
+    const edgarFilingsRaw = formData.get("edgarFilings");
+    const edgarFilingNames: string[] = [];
+    if (edgarFilingsRaw) {
+      const edgarFilings = JSON.parse(edgarFilingsRaw as string) as { company: string; cik: string; formType: string; filingDate: string; accessionNo: string }[];
+      for (const filing of edgarFilings) {
+        const params = new URLSearchParams({ cik: filing.cik, accession: filing.accessionNo });
+        const contentRes = await fetch(`${req.nextUrl.origin}/api/edgar/content?${params}`);
+        if (contentRes.ok) {
+          const { text } = await contentRes.json();
+          const label = `${filing.company} — ${filing.formType} (Filed ${filing.filingDate})`;
+          documentTexts.push(`=== ${label} [SEC EDGAR] ===\n${text}`);
+          edgarFilingNames.push(label);
+        }
+      }
+    }
+
+    if (!documentTexts.length) {
+      return Response.json({ error: "No content could be extracted from the provided sources" }, { status: 400 });
+    }
+
     const combinedContent = documentTexts.join("\n\n---\n\n");
 
     let contextPrefix = "";
-    const contextDetails: Record<string, unknown> = { files: files.map(f => f.name) };
+    const contextDetails: Record<string, unknown> = {
+      files: files.map(f => f.name),
+      ...(edgarFilingNames.length ? { edgarFilings: edgarFilingNames } : {}),
+    };
     let clientNumber: string | null = null;
     let matterNumber: string | null = null;
     const clientId = formData.get("clientId");

@@ -6,10 +6,13 @@ import FileList from "@/components/FileList";
 import StreamingResponse from "@/components/StreamingResponse";
 import SummaryChat from "@/components/SummaryChat";
 import ClientMatterSelect from "@/components/ClientMatterSelect";
+import EdgarButton from "@/components/EdgarButton";
+import type { EdgarFiling } from "@/components/EdgarBrowser";
 import type { Client, Matter } from "@/types";
 
 export default function SummaryPage() {
   const [files, setFiles] = useState<File[]>([]);
+  const [edgarFilings, setEdgarFilings] = useState<EdgarFiling[]>([]);
   const [content, setContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,10 +37,19 @@ export default function SummaryPage() {
     setSelectedMatter(null);
   }, []);
 
-  const canSubmit = files.length > 0 && selectedClient && selectedMatter && !isStreaming;
+  const handleEdgarAdd = useCallback((filing: EdgarFiling) => {
+    setEdgarFilings(prev => prev.find(f => f.accessionNo === filing.accessionNo) ? prev : [...prev, filing]);
+  }, []);
+
+  const handleEdgarRemove = useCallback((accessionNo: string) => {
+    setEdgarFilings(prev => prev.filter(f => f.accessionNo !== accessionNo));
+  }, []);
+
+  const totalSources = files.length + edgarFilings.length;
+  const canSubmit = totalSources > 0 && selectedClient && selectedMatter && !isStreaming;
 
   const handleSubmit = useCallback(async () => {
-    if (!files.length || !selectedClient || !selectedMatter) return;
+    if (!totalSources || !selectedClient || !selectedMatter) return;
 
     setContent("");
     setError(null);
@@ -45,6 +57,9 @@ export default function SummaryPage() {
 
     const formData = new FormData();
     files.forEach((file) => formData.append("files", file));
+    if (edgarFilings.length > 0) {
+      formData.append("edgarFilings", JSON.stringify(edgarFilings));
+    }
     formData.append("clientId", String(selectedClient.id));
     formData.append("matterId", String(selectedMatter.id));
 
@@ -98,7 +113,7 @@ export default function SummaryPage() {
     } finally {
       setIsStreaming(false);
     }
-  }, [files, selectedClient, selectedMatter]);
+  }, [files, edgarFilings, totalSources, selectedClient, selectedMatter]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -113,20 +128,41 @@ export default function SummaryPage() {
           onClear={handleClientMatterClear}
         />
         <FileDropZone onFiles={handleFiles} />
-<FileList files={files} onRemove={handleRemove} />
+        <FileList files={files} onRemove={handleRemove} />
+
+        {/* EDGAR option */}
+        <div className="flex items-center gap-3">
+          <EdgarButton onAdd={handleEdgarAdd} alreadyAdded={edgarFilings.map(f => f.accessionNo)} />
+        </div>
+
+        {/* EDGAR filing list */}
+        {edgarFilings.length > 0 && (
+          <ul className="space-y-1.5">
+            {edgarFilings.map(f => (
+              <li key={f.accessionNo} className="flex items-center justify-between gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <span className="font-medium text-blue-900 truncate block">{f.company}</span>
+                  <span className="text-xs text-blue-600">{f.formType} · Filed {f.filingDate}</span>
+                </div>
+                <button onClick={() => handleEdgarRemove(f.accessionNo)} className="text-blue-400 hover:text-blue-700 text-lg leading-none flex-shrink-0">&times;</button>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {canSubmit && (
           <button
             onClick={handleSubmit}
             className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-medium hover:bg-blue-700 transition-colors"
           >
-            Summarize {files.length} document{files.length !== 1 ? "s" : ""}
+            Summarize {totalSources} source{totalSources !== 1 ? "s" : ""}
           </button>
         )}
 
-        {files.length > 0 && !selectedMatter && !isStreaming && (
+        {totalSources > 0 && !selectedMatter && !isStreaming && (
           <p className="text-sm text-amber-600 text-center">
             Select a client and matter above before submitting.
+
           </p>
         )}
 
@@ -154,7 +190,10 @@ export default function SummaryPage() {
         {content && !isStreaming && !error && (
           <SummaryChat
             summaryContent={content}
-            documentNames={files.map((f) => f.name)}
+            documentNames={[
+            ...files.map(f => f.name),
+            ...edgarFilings.map(f => `${f.company} ${f.formType} (${f.filingDate})`),
+          ]}
           />
         )}
       </div>
