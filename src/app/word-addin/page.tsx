@@ -13,22 +13,6 @@ type View = "summarize" | "chat";
 interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
 
-async function copyToClipboard(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  // Fallback for Office WebView2 where clipboard API may be unavailable
-  const el = document.createElement("textarea");
-  el.value = text;
-  el.style.cssText = "position:fixed;opacity:0;pointer-events:none;";
-  document.body.appendChild(el);
-  el.focus();
-  el.select();
-  const ok = document.execCommand("copy");
-  document.body.removeChild(el);
-  if (!ok) throw new Error("Copy failed");
-}
 
 export default function WordAddinPage() {
   const [officeReady, setOfficeReady] = useState(false);
@@ -46,20 +30,6 @@ export default function WordAddinPage() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
-
-  const [copied, setCopied] = useState<string | null>(null);
-
-  function handleCopy(text: string, key: string) {
-    copyToClipboard(text)
-      .then(() => {
-        setCopied(key);
-        setTimeout(() => setCopied(null), 1500);
-      })
-      .catch(() => {
-        setCopied(`${key}-error`);
-        setTimeout(() => setCopied(null), 2000);
-      });
-  }
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -383,10 +353,6 @@ export default function WordAddinPage() {
                       <div className="mt-3 border-t border-gray-200 pt-3">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Citations</span>
-                          <button
-                            onClick={() => handleCopy(citationsToMarkdown(citations), "summary-citations")}
-                            className="text-xs font-semibold text-white bg-gray-800 hover:bg-gray-900 px-2 py-0.5 rounded transition-colors"
-                          >{copied === "summary-citations" ? "Copied!" : copied === "summary-citations-error" ? "Failed" : "Copy"}</button>
                         </div>
                         <div className="space-y-2">
                           {citations.map(c => (
@@ -402,21 +368,15 @@ export default function WordAddinPage() {
                       </div>
                     )}
 
-                    {/* Insert / Download buttons */}
+                    {/* Insert button */}
                     {!isStreaming && (
-                      <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="mt-3">
                         <button
                           onClick={() => insertIntoDocument(hasCitations ? main : content)}
                           disabled={!officeReady}
-                          className="bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
+                          className="w-full bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
                         >
                           Insert into Doc
-                        </button>
-                        <button
-                          onClick={() => handleCopy(hasCitations ? main : content, "summary")}
-                          className="bg-gray-800 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-900"
-                        >
-                          {copied === "summary" ? "Copied!" : copied === "summary-error" ? "Failed" : "Copy"}
                         </button>
                       </div>
                     )}
@@ -454,10 +414,6 @@ export default function WordAddinPage() {
                                 <div className="mt-2 pt-2 border-t border-gray-200">
                                   <div className="flex items-center justify-between mb-1.5">
                                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Citations</span>
-                                    <button
-                                      onClick={() => handleCopy(citationsToMarkdown(msgCitations), `chat-citations-${i}`)}
-                                      className="text-xs font-semibold text-white bg-gray-800 hover:bg-gray-900 px-2 py-0.5 rounded transition-colors"
-                                    >{copied === `chat-citations-${i}` ? "Copied!" : copied === `chat-citations-${i}-error` ? "Failed" : "Copy"}</button>
                                   </div>
                                   <div className="space-y-1.5">
                                     {msgCitations.map(c => (
