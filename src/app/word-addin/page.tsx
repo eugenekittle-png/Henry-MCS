@@ -13,20 +13,8 @@ type View = "summarize" | "chat";
 interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
 
-async function downloadPdf(markdown: string, filename: string) {
-  const res = await fetch("/api/export-docx", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ markdown }),
-  });
-  if (!res.ok) return;
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+async function copyToClipboard(text: string) {
+  await navigator.clipboard.writeText(text);
 }
 
 export default function WordAddinPage() {
@@ -45,6 +33,15 @@ export default function WordAddinPage() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+
+  const [copied, setCopied] = useState<string | null>(null);
+
+  function handleCopy(text: string, key: string) {
+    copyToClipboard(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  }
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -369,9 +366,9 @@ export default function WordAddinPage() {
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Citations</span>
                           <button
-                            onClick={() => downloadPdf(citationsToMarkdown(citations), "citations.pdf")}
+                            onClick={() => handleCopy(citationsToMarkdown(citations), "summary-citations")}
                             className="text-xs font-semibold text-white bg-gray-800 hover:bg-gray-900 px-2 py-0.5 rounded transition-colors"
-                          >Download</button>
+                          >{copied === "summary-citations" ? "Copied!" : "Copy"}</button>
                         </div>
                         <div className="space-y-2">
                           {citations.map(c => (
@@ -398,10 +395,10 @@ export default function WordAddinPage() {
                           Insert into Doc
                         </button>
                         <button
-                          onClick={() => downloadPdf(hasCitations ? main : content, "summary.pdf")}
+                          onClick={() => handleCopy(hasCitations ? main : content, "summary")}
                           className="bg-gray-800 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-900"
                         >
-                          Download
+                          {copied === "summary" ? "Copied!" : "Copy"}
                         </button>
                       </div>
                     )}
@@ -440,9 +437,9 @@ export default function WordAddinPage() {
                                   <div className="flex items-center justify-between mb-1.5">
                                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Citations</span>
                                     <button
-                                      onClick={() => downloadPdf(citationsToMarkdown(msgCitations), "citations.pdf")}
+                                      onClick={() => handleCopy(citationsToMarkdown(msgCitations), `chat-citations-${i}`)}
                                       className="text-xs font-semibold text-white bg-gray-800 hover:bg-gray-900 px-2 py-0.5 rounded transition-colors"
-                                    >Download</button>
+                                    >{copied === `chat-citations-${i}` ? "Copied!" : "Copy"}</button>
                                   </div>
                                   <div className="space-y-1.5">
                                     {msgCitations.map(c => (
