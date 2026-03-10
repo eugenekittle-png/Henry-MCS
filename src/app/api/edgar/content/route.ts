@@ -1,10 +1,6 @@
 import { NextRequest } from "next/server";
 
-const EDGAR_HEADERS = {
-  "User-Agent": "HenryMCS research@henry-mcs.com",
-  "Accept": "*/*",
-};
-
+const EDGAR_HEADERS = { "User-Agent": "HenryMCS research@henry-mcs.com" };
 const MAX_TEXT_LENGTH = 120_000;
 
 function stripHtml(html: string): string {
@@ -24,7 +20,8 @@ function stripHtml(html: string): string {
 
 export async function GET(req: NextRequest) {
   const cik = req.nextUrl.searchParams.get("cik");
-  const accession = req.nextUrl.searchParams.get("accession"); // e.g. 0000320193-24-000123
+  const accession = req.nextUrl.searchParams.get("accession");
+  const primaryDocument = req.nextUrl.searchParams.get("primaryDocument");
 
   if (!cik || !accession) {
     return Response.json({ error: "cik and accession are required" }, { status: 400 });
@@ -33,36 +30,24 @@ export async function GET(req: NextRequest) {
   try {
     const accessionNoDashes = accession.replace(/-/g, "");
 
-    // Step 1: get the filing index to find the primary document
-    const indexUrl = `https://www.sec.gov/Archives/edgar/data/${cik}/${accessionNoDashes}-index.json`;
-    const indexRes = await fetch(indexUrl, { headers: EDGAR_HEADERS });
+    // If primaryDocument was supplied directly, use it
+    const docFilename = primaryDocument || await fetchPrimaryDocument(cik, accessionNoDashes);
 
-    let primaryDoc = "";
-    let formType = "";
-    if (indexRes.ok) {
-      const idx = await indexRes.json();
-      primaryDoc = idx.primaryDocument ?? "";
-      formType = idx.form ?? "";
-    }
-
-    // Step 2: fetch the primary document HTML
-    if (primaryDoc) {
-      const docUrl = `https://www.sec.gov/Archives/edgar/data/${cik}/${accessionNoDashes}/${primaryDoc}`;
+    if (docFilename) {
+      const docUrl = `https://www.sec.gov/Archives/edgar/data/${cik}/${accessionNoDashes}/${docFilename}`;
       const docRes = await fetch(docUrl, { headers: EDGAR_HEADERS });
       if (docRes.ok) {
         const html = await docRes.text();
-        const text = stripHtml(html).substring(0, MAX_TEXT_LENGTH);
-        return Response.json({ text, formType });
+        return Response.json({ text: stripHtml(html).substring(0, MAX_TEXT_LENGTH) });
       }
     }
 
-    // Fallback: fetch the full submission text file (always exists, larger)
+    // Fallback: full submission text file
     const txtUrl = `https://www.sec.gov/Archives/edgar/data/${cik}/${accessionNoDashes}.txt`;
     const txtRes = await fetch(txtUrl, { headers: EDGAR_HEADERS });
     if (txtRes.ok) {
       const raw = await txtRes.text();
-      const text = stripHtml(raw).substring(0, MAX_TEXT_LENGTH);
-      return Response.json({ text, formType });
+      return Response.json({ text: stripHtml(raw).substring(0, MAX_TEXT_LENGTH) });
     }
 
     return Response.json({ error: "Could not retrieve filing document" }, { status: 404 });
@@ -70,4 +55,12 @@ export async function GET(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Content fetch failed";
     return Response.json({ error: message }, { status: 500 });
   }
+}
+
+async function fetchPrimaryDocument(cik: string, accessionNoDashes: string): Promise<string> {
+  const indexUrl = `https://www.sec.gov/Archives/edgar/data/${cik}/${accessionNoDashes}-index.json`;
+  const res = await fetch(indexUrl, { headers: EDGAR_HEADERS });
+  if (!res.ok) return "";
+  const idx = await res.json();
+  return idx.primaryDocument ?? "";
 }
