@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createChatStream } from "@/lib/anthropic";
-import { getSession } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth";
 import { logAction } from "@/lib/audit";
 
 export const maxDuration = 300;
@@ -23,7 +23,7 @@ When your answer references specific content from the documents, use inline cita
 Only include the citations section when you actually have citations to list.`;
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
 
   try {
     const { messages } = await req.json();

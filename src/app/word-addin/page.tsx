@@ -52,11 +52,17 @@ export default function WordAddinPage() {
   const [chatStreaming, setChatStreaming] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.user?.username) setUser({ username: d.user.username, role: d.user.role }); })
+      .then(d => {
+        if (d?.user?.username) {
+          setUser({ username: d.user.username, role: d.user.role });
+          if (d.token) tokenRef.current = d.token;
+        }
+      })
       .catch(() => {})
       .finally(() => setAuthLoading(false));
   }, []);
@@ -81,6 +87,7 @@ export default function WordAddinPage() {
         setLoginError("Please visit the Henry MCS web app to set your password before using this add-in.");
         return;
       }
+      if (data.token) tokenRef.current = data.token;
       setUser({ username: data.username, role: data.role });
     } catch {
       setLoginError("Something went wrong. Please try again.");
@@ -130,9 +137,11 @@ export default function WordAddinPage() {
     }
 
     try {
+      const summarizeHeaders: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) summarizeHeaders["Authorization"] = `Bearer ${tokenRef.current}`;
       const res = await fetch("/api/addin/summarize", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: summarizeHeaders,
         body: JSON.stringify({ text: docText, filename: selectionOnly ? "Selection" : "Document" }),
       });
 
@@ -190,9 +199,11 @@ export default function WordAddinPage() {
     setChatStreaming(true);
 
     try {
+      const chatHeaders: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) chatHeaders["Authorization"] = `Bearer ${tokenRef.current}`;
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: chatHeaders,
         body: JSON.stringify({ messages: apiMessages }),
       });
       if (!res.ok) { let m = `Failed (${res.status})`; try { const d = await res.json(); if (d.error) m = d.error; } catch { /* non-JSON */ } throw new Error(m); }

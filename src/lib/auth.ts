@@ -51,6 +51,15 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 // --- Session token (HMAC-signed JSON) ---
 
+export async function getSessionFromRequest(req: Request): Promise<SessionPayload | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const session = await verifySessionToken(authHeader.slice(7));
+    if (session) return session;
+  }
+  return getSession();
+}
+
 export async function createSessionToken(payload: Omit<SessionPayload, "exp">): Promise<string> {
   const data: SessionPayload = { ...payload, exp: Date.now() + SESSION_MAX_AGE * 1000 };
   const json = JSON.stringify(data);
@@ -82,7 +91,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
 
 // --- Cookie helpers (for use in API routes / server components) ---
 
-export async function setSessionCookie(payload: Omit<SessionPayload, "exp">) {
+export async function setSessionCookie(payload: Omit<SessionPayload, "exp">): Promise<string> {
   const token = await createSessionToken(payload);
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
@@ -92,6 +101,7 @@ export async function setSessionCookie(payload: Omit<SessionPayload, "exp">) {
     maxAge: SESSION_MAX_AGE,
     path: "/",
   });
+  return token;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {

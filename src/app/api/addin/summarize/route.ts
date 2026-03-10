@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { createStream } from "@/lib/anthropic";
 import { SUMMARY_SYSTEM_PROMPT } from "@/lib/constants";
-import { getSession } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth";
 import { logAction } from "@/lib/audit";
 
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
