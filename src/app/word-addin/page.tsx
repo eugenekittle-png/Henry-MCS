@@ -81,6 +81,23 @@ export default function WordAddinPage() {
     }
   }
 
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    tokenRef.current = null;
+    setUser(null);
+    setContent("");
+    setMessages([]);
+    setError(null);
+    setView("summarize");
+  }
+
+  function handleRefresh() {
+    setContent("");
+    setMessages([]);
+    setError(null);
+    setView("summarize");
+  }
+
   async function getDocumentText(selectionOnly: boolean): Promise<string> {
     return (window as any).Word.run(async (context: any) => {
       const range = selectionOnly ? context.document.getSelection() : context.document.body;
@@ -250,7 +267,13 @@ export default function WordAddinPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/images/henry-mcs.png" alt="" style={{ height: "22px", width: "auto" }} />
           <span className="text-white font-semibold text-sm">Henry MCS</span>
-          {user && <span className="ml-auto text-gray-400 text-xs truncate max-w-[120px]">{user.username}</span>}
+          {user && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-gray-400 text-xs truncate max-w-[80px]">{user.username}</span>
+              <button onClick={handleRefresh} className="text-gray-400 hover:text-white text-xs transition-colors" title="Refresh">↺</button>
+              <button onClick={handleLogout} className="text-gray-400 hover:text-white text-xs transition-colors" title="Sign out">Sign out</button>
+            </div>
+          )}
         </div>
 
         {authLoading ? (
