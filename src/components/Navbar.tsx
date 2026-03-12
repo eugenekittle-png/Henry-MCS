@@ -52,6 +52,9 @@ export default function Navbar() {
           <span className="text-white font-bold text-lg">Henry MCS</span>
         </Link>
         <div className="flex items-center gap-2">
+          <Link href="/assist" className={linkClass("/assist")}>
+            Assist
+          </Link>
           <Link href="/summary" className={linkClass("/summary")}>
             Summary
           </Link>
@@ -61,10 +64,7 @@ export default function Navbar() {
           <Link href="/compare" className={linkClass("/compare")}>
             Compare
           </Link>
-          <Link href="/review" className={linkClass("/review")}>
-            Review
-          </Link>
-          {user.role === "admin" && (
+{user.role === "admin" && (
             <>
               <span className="w-px bg-gray-700 mx-1" />
               <div className="relative" ref={dropdownRef}>

@@ -47,6 +47,16 @@ export default function SummaryPage() {
 
   const totalSources = files.length + edgarFilings.length;
   const canSubmit = totalSources > 0 && selectedClient && selectedMatter && !isStreaming;
+  const hasResults = !!content || isStreaming;
+
+  const handleReset = useCallback(() => {
+    setFiles([]);
+    setEdgarFilings([]);
+    setContent("");
+    setError(null);
+    setSelectedClient(null);
+    setSelectedMatter(null);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!totalSources || !selectedClient || !selectedMatter) return;
@@ -117,16 +127,37 @@ export default function SummaryPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Document Summary</h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-bold text-gray-900">Document Summary</h1>
+        {hasResults && (
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            New Summary
+          </button>
+        )}
+      </div>
       <p className="text-gray-600 mb-6">
         Upload documents to get a comprehensive AI-generated summary.
       </p>
 
       <div className="space-y-4">
-        <ClientMatterSelect
-          onSelect={handleClientMatterSelect}
-          onClear={handleClientMatterClear}
-        />
+        {!hasResults ? (
+          <ClientMatterSelect
+            onSelect={handleClientMatterSelect}
+            onClear={handleClientMatterClear}
+          />
+        ) : selectedClient && selectedMatter && (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span className="font-medium text-gray-700">{selectedClient.name}</span>
+            <span className="text-gray-300">/</span>
+            <span>{selectedMatter.description}</span>
+          </div>
+        )}
         <FileDropZone onFiles={handleFiles} />
         <FileList files={files} onRemove={handleRemove} />
 

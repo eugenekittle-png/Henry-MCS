@@ -34,6 +34,7 @@ const ACTION_LABELS: Record<string, string> = {
   breakdown: "Breakdown",
   compare: "Compare (AI)",
   compare_diff: "Compare (Diff)",
+  assist: "Assist",
   chat: "Chat",
   user_create: "Create User",
   user_update: "Update User",

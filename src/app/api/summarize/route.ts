@@ -38,9 +38,10 @@ export async function POST(req: NextRequest) {
     const edgarFilingsRaw = formData.get("edgarFilings");
     const edgarFilingNames: string[] = [];
     if (edgarFilingsRaw) {
-      const edgarFilings = JSON.parse(edgarFilingsRaw as string) as { company: string; cik: string; formType: string; filingDate: string; accessionNo: string }[];
+      const edgarFilings = JSON.parse(edgarFilingsRaw as string) as { company: string; cik: string; formType: string; filingDate: string; accessionNo: string; primaryDocument?: string }[];
       for (const filing of edgarFilings) {
         const params = new URLSearchParams({ cik: filing.cik, accession: filing.accessionNo });
+        if (filing.primaryDocument) params.set("primaryDocument", filing.primaryDocument);
         const contentRes = await fetch(`${req.nextUrl.origin}/api/edgar/content?${params}`);
         if (contentRes.ok) {
           const { text } = await contentRes.json();

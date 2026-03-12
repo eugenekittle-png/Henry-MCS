@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+
 export const metadata: Metadata = {
   title: "Henry MCS - Document Analysis Tools",
   description: "AI-powered document summary and breakdown tools",

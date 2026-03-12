@@ -43,6 +43,19 @@ export default function ComparePage() {
 
   const isBusy = isComparing || isStreaming;
   const canSubmit = file1 && file2 && selectedClient && selectedMatter && !isBusy;
+  const hasResults = diffLines.length > 0 || isBusy;
+
+  const handleReset = useCallback(() => {
+    setFile1(null);
+    setFile2(null);
+    setDiffLines([]);
+    setDiffFile1Name("");
+    setDiffFile2Name("");
+    setSummaryContent("");
+    setError(null);
+    setSelectedClient(null);
+    setSelectedMatter(null);
+  }, []);
 
   const streamSummary = useCallback(async (formData: FormData) => {
     setIsStreaming(true);
@@ -173,16 +186,37 @@ export default function ComparePage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Document Compare</h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-bold text-gray-900">Document Compare</h1>
+        {hasResults && (
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            New Compare
+          </button>
+        )}
+      </div>
       <p className="text-gray-600 mb-6">
         Upload two documents to get a line-by-line comparison.
       </p>
 
       <div className="space-y-4">
-        <ClientMatterSelect
-          onSelect={handleClientMatterSelect}
-          onClear={handleClientMatterClear}
-        />
+        {!hasResults ? (
+          <ClientMatterSelect
+            onSelect={handleClientMatterSelect}
+            onClear={handleClientMatterClear}
+          />
+        ) : selectedClient && selectedMatter && (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span className="font-medium text-gray-700">{selectedClient.name}</span>
+            <span className="text-gray-300">/</span>
+            <span>{selectedMatter.description}</span>
+          </div>
+        )}
 
         <label className="flex items-center gap-2 px-1 cursor-pointer">
           <input

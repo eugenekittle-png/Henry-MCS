@@ -28,6 +28,21 @@ type GroupBy = "user" | "client" | "matter" | "log";
 const INPUT_COST_PER_M = 3.0;
 const OUTPUT_COST_PER_M = 15.0;
 
+const ACTION_LABELS: Record<string, string> = {
+  login: "Login",
+  logout: "Logout",
+  change_password: "Change Password",
+  summarize: "Summarize",
+  breakdown: "Breakdown",
+  compare: "Compare (AI)",
+  compare_diff: "Compare (Diff)",
+  assist: "Assist",
+  chat: "Chat",
+  user_create: "Create User",
+  user_update: "Update User",
+  user_delete: "Delete User",
+};
+
 function calcCost(input: number, output: number) {
   return (input / 1_000_000) * INPUT_COST_PER_M + (output / 1_000_000) * OUTPUT_COST_PER_M;
 }
@@ -254,7 +269,7 @@ export default function UsagePage() {
                           <td className="px-4 py-2.5 font-mono text-xs text-gray-600 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
                           <td className="px-4 py-2.5 text-xs text-gray-800">{r.username ?? <span className="text-gray-400">—</span>}</td>
                           <td className="px-4 py-2.5 text-xs">
-                            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono">{r.action}</span>
+                            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono">{ACTION_LABELS[r.action] ?? r.action}</span>
                           </td>
                           <td className="px-4 py-2.5 text-xs text-gray-600">{r.client_number ?? <span className="text-gray-300">—</span>}</td>
                           <td className="px-4 py-2.5 text-xs text-gray-600">{r.matter_number ?? <span className="text-gray-300">—</span>}</td>

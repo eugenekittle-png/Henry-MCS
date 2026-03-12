@@ -14,6 +14,26 @@ export default function Home() {
 
       <div className="grid md:grid-cols-3 gap-6">
         <Link
+          href="/assist"
+          className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-indigo-300 transition-all"
+        >
+          <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-200 transition-colors">
+            <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Assist
+          </h2>
+          <p className="text-gray-600">
+            Ask questions, analyze documents, and explore any topic with a conversational AI assistant built for law firm workflows.
+          </p>
+          <p className="text-sm text-gray-400 mt-4">
+            Documents optional — supports PDF, DOCX, XLSX, TXT and more
+          </p>
+        </Link>
+
+        <Link
           href="/summary"
           className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-blue-300 transition-all"
         >
@@ -23,7 +43,7 @@ export default function Home() {
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Document Summary
+            Summary
           </h2>
           <p className="text-gray-600">
             Upload one or more documents and get a comprehensive AI-generated
@@ -44,7 +64,7 @@ export default function Home() {
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Document Breakdown
+            Breakdown
           </h2>
           <p className="text-gray-600">
             Upload a zip file of documents and get an organized catalog with
@@ -65,7 +85,7 @@ export default function Home() {
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Document Compare
+            Compare
           </h2>
           <p className="text-gray-600">
             Upload two documents and get a detailed AI-generated comparison
