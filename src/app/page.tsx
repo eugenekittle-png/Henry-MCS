@@ -3,9 +3,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/components/AuthContext";
-import courthouseImg from "@/images/courthouse__justice_aesthetic_stone_courthouse_columns.jpeg";
-import attorneys1Img from "@/images/trust__credibility_two_professional_attorneys_in (1).jpeg";
-import attorneys2Img from "@/images/trust__credibility_two_professional_attorneys_in (2).jpeg";
+import courthouseImg from "@/images/courthouse.jpeg";
+import attorneys1Img from "@/images/attorneys-1.jpeg";
+import attorneys2Img from "@/images/attorneys-2.jpeg";
 
 const faqs = [
   {
