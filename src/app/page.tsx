@@ -58,7 +58,7 @@ function LandingPage() {
             AI-Powered Document Analysis<br className="hidden sm:block" /> for Law Firms
           </h1>
           <p className="text-lg text-gray-200 mb-8 max-w-xl mx-auto">
-            Summarize, compare, catalog, and interrogate your legal documents in seconds — powered by Claude.
+            Summarize, compare, catalog, and interrogate your legal documents in seconds.
           </p>
           <Link
             href="/login"
