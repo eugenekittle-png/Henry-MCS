@@ -6,7 +6,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>e9f3c2b1-7a4d-4e8f-b2c5-1a9d3f7e2b6c</Id>
-  <Version>1.0.0.1</Version>
+  <Version>1.0.0.2</Version>
   <ProviderName>Henry MCS</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
@@ -38,40 +38,41 @@
 
           <ExtensionPoint xsi:type="ContextMenu">
             <OfficeMenu id="ContextMenuText">
-              <Control xsi:type="Menu" id="HenryMCSContextMenu">
-                <Label resid="MenuLabel" />
+
+              <Control xsi:type="Button" id="HenryMCSAsk">
+                <Label resid="AskLabel" />
+                <Supertip>
+                  <Title resid="AskLabel" />
+                  <Description resid="AskDesc" />
+                </Supertip>
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16" />
                   <bt:Image size="32" resid="Icon.32x32" />
                   <bt:Image size="80" resid="Icon.80x80" />
                 </Icon>
-                <Items>
-                  <Item id="HenryMCSAsk">
-                    <Label resid="AskLabel" />
-                    <Icon>
-                      <bt:Image size="16" resid="Icon.16x16" />
-                      <bt:Image size="32" resid="Icon.32x32" />
-                      <bt:Image size="80" resid="Icon.80x80" />
-                    </Icon>
-                    <Action xsi:type="ShowTaskpane">
-                      <TaskpaneId>HenryMCSPane</TaskpaneId>
-                      <SourceLocation resid="AskPane.Url" />
-                    </Action>
-                  </Item>
-                  <Item id="HenryMCSSuggest">
-                    <Label resid="SuggestLabel" />
-                    <Icon>
-                      <bt:Image size="16" resid="Icon.16x16" />
-                      <bt:Image size="32" resid="Icon.32x32" />
-                      <bt:Image size="80" resid="Icon.80x80" />
-                    </Icon>
-                    <Action xsi:type="ShowTaskpane">
-                      <TaskpaneId>HenryMCSPane</TaskpaneId>
-                      <SourceLocation resid="SuggestPane.Url" />
-                    </Action>
-                  </Item>
-                </Items>
+                <Action xsi:type="ShowTaskpane">
+                  <TaskpaneId>HenryMCSPane</TaskpaneId>
+                  <SourceLocation resid="AskPane.Url" />
+                </Action>
               </Control>
+
+              <Control xsi:type="Button" id="HenryMCSSuggest">
+                <Label resid="SuggestLabel" />
+                <Supertip>
+                  <Title resid="SuggestLabel" />
+                  <Description resid="SuggestDesc" />
+                </Supertip>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16" />
+                  <bt:Image size="32" resid="Icon.32x32" />
+                  <bt:Image size="80" resid="Icon.80x80" />
+                </Icon>
+                <Action xsi:type="ShowTaskpane">
+                  <TaskpaneId>HenryMCSPane</TaskpaneId>
+                  <SourceLocation resid="SuggestPane.Url" />
+                </Action>
+              </Control>
+
             </OfficeMenu>
           </ExtensionPoint>
 
@@ -91,12 +92,12 @@
         <bt:Url id="SuggestPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?action=suggest" />
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="MenuLabel" DefaultValue="Henry MCS" />
-        <bt:String id="AskLabel" DefaultValue="Ask" />
-        <bt:String id="SuggestLabel" DefaultValue="Suggest" />
+        <bt:String id="AskLabel" DefaultValue="Henry MCS: Ask" />
+        <bt:String id="SuggestLabel" DefaultValue="Henry MCS: Suggest" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="MenuLabel" DefaultValue="Henry MCS AI Assistant" />
+        <bt:String id="AskDesc" DefaultValue="Ask Henry MCS about the selected text" />
+        <bt:String id="SuggestDesc" DefaultValue="Get suggestions for the selected text from Henry MCS" />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
