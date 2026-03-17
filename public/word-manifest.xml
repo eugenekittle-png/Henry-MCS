@@ -56,23 +56,6 @@
                 </Action>
               </Control>
 
-              <Control xsi:type="Button" id="HenryMCSSuggest">
-                <Label resid="SuggestLabel" />
-                <Supertip>
-                  <Title resid="SuggestLabel" />
-                  <Description resid="SuggestDesc" />
-                </Supertip>
-                <Icon>
-                  <bt:Image size="16" resid="Icon.16x16" />
-                  <bt:Image size="32" resid="Icon.32x32" />
-                  <bt:Image size="80" resid="Icon.80x80" />
-                </Icon>
-                <Action xsi:type="ShowTaskpane">
-                  <TaskpaneId>HenryMCSPane</TaskpaneId>
-                  <SourceLocation resid="SuggestPane.Url" />
-                </Action>
-              </Control>
-
             </OfficeMenu>
           </ExtensionPoint>
 
@@ -89,15 +72,12 @@
       <bt:Urls>
         <bt:Url id="Commands.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin-commands.html" />
         <bt:Url id="AskPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?action=ask" />
-        <bt:Url id="SuggestPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?action=suggest" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="AskLabel" DefaultValue="Henry MCS: Ask" />
-        <bt:String id="SuggestLabel" DefaultValue="Henry MCS: Suggest" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="AskDesc" DefaultValue="Ask Henry MCS about the selected text" />
-        <bt:String id="SuggestDesc" DefaultValue="Get suggestions for the selected text from Henry MCS" />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>

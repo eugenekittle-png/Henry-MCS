@@ -47,12 +47,8 @@ export default function WordAddinPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const action = params.get("action");
-    if (action === "ask") {
+    if (params.get("action") === "ask") {
       setView("ask");
-    } else if (action === "suggest") {
-      setView("ask");
-      setAskPrompt("Suggest improvements to the selected text.");
     }
   }, []);
 
