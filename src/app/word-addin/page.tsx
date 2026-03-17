@@ -46,6 +46,17 @@ export default function WordAddinPage() {
   const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    if (action === "ask") {
+      setView("ask");
+    } else if (action === "suggest") {
+      setView("ask");
+      setAskPrompt("Suggest improvements to the selected text.");
+    }
+  }, []);
+
+  useEffect(() => {
     fetch("/api/auth/me")
       .then(r => r.ok ? r.json() : null)
       .then(d => {
