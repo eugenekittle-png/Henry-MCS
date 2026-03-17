@@ -8,7 +8,7 @@ import { parseContentAndCitations, citationsToMarkdown } from "@/lib/citations";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-type View = "summarize" | "chat";
+type View = "summarize" | "ask" | "chat";
 
 interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
@@ -30,6 +30,12 @@ export default function WordAddinPage() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // Ask state
+  const [askPrompt, setAskPrompt] = useState("");
+  const [askContent, setAskContent] = useState("");
+  const [askStreaming, setAskStreaming] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -95,6 +101,9 @@ export default function WordAddinPage() {
     setContent("");
     setMessages([]);
     setError(null);
+    setAskContent("");
+    setAskError(null);
+    setAskPrompt("");
     setView("summarize");
   }
 
@@ -183,6 +192,72 @@ export default function WordAddinPage() {
     }
   }, [officeReady]);
 
+  const handleAsk = useCallback(async (selectionOnly: boolean) => {
+    if (!officeReady || !askPrompt.trim()) return;
+    setAskContent("");
+    setAskError(null);
+    setAskStreaming(true);
+
+    let docText = "";
+    try {
+      docText = await getDocumentText(selectionOnly);
+    } catch {
+      setAskError("Could not read the document. Make sure a Word document is open.");
+      setAskStreaming(false);
+      return;
+    }
+
+    if (!docText.trim()) {
+      setAskError(selectionOnly ? "No text is selected." : "The document appears to be empty.");
+      setAskStreaming(false);
+      return;
+    }
+
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      const res = await fetch("/api/addin/recommend", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ text: docText, prompt: askPrompt.trim() }),
+      });
+
+      if (!res.ok) {
+        let errMsg = `Request failed (${res.status})`;
+        try { const data = await res.json(); if (data.error) errMsg = data.error; } catch { /* non-JSON */ }
+        throw new Error(errMsg);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6);
+          if (data === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.error) { setAskError(parsed.error); setAskStreaming(false); return; }
+            if (parsed.text) setAskContent(prev => prev + parsed.text);
+          } catch { /* skip */ }
+        }
+      }
+    } catch (err) {
+      setAskError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setAskStreaming(false);
+    }
+  }, [officeReady, askPrompt]);
+
   async function handleChat(e: FormEvent) {
     e.preventDefault();
     const question = chatInput.trim();
@@ -252,6 +327,8 @@ export default function WordAddinPage() {
 
   const { main, citations } = parseContentAndCitations(content);
   const hasCitations = citations.length > 0;
+  const { main: askMain, citations: askCitations } = parseContentAndCitations(askContent);
+  const askHasCitations = askCitations.length > 0;
 
   return (
     <>
@@ -312,16 +389,16 @@ export default function WordAddinPage() {
 
             {/* Tabs */}
             <div className="flex border-b border-gray-200 bg-white flex-shrink-0">
-              {(["summarize", "chat"] as View[]).map(v => (
+              {(["summarize", "ask", "chat"] as View[]).map(v => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
                   disabled={v === "chat" && !content}
-                  className={`flex-1 py-2 text-xs font-medium transition-colors capitalize ${
+                  className={`flex-1 py-2 text-xs font-medium transition-colors ${
                     view === v ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"
                   } disabled:opacity-40 disabled:cursor-not-allowed`}
                 >
-                  {v === "chat" ? "Follow-up" : "Summarize"}
+                  {v === "summarize" ? "Summarize" : v === "ask" ? "Ask" : "Follow-up"}
                 </button>
               ))}
             </div>
@@ -405,6 +482,100 @@ export default function WordAddinPage() {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── Ask view ── */}
+            {view === "ask" && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Prompt input */}
+                <div className="p-3 space-y-2 flex-shrink-0 border-b border-gray-100">
+                  <textarea
+                    rows={3}
+                    value={askPrompt}
+                    onChange={e => setAskPrompt(e.target.value)}
+                    placeholder="What would you like to know or do? e.g. &quot;What are the risks in this clause?&quot; or &quot;Suggest improvements to this paragraph.&quot;"
+                    disabled={askStreaming}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleAsk(true)}
+                      disabled={!officeReady || !askPrompt.trim() || askStreaming}
+                      className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Ask about Selection
+                    </button>
+                    <button
+                      onClick={() => handleAsk(false)}
+                      disabled={!officeReady || !askPrompt.trim() || askStreaming}
+                      className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Ask about Document
+                    </button>
+                  </div>
+                  {!officeReady && (
+                    <p className="text-xs text-gray-400 text-center">Connecting to Word...</p>
+                  )}
+                </div>
+
+                {/* Result area */}
+                <div className="flex-1 overflow-y-auto">
+                  {askStreaming && (
+                    <div className="px-3 py-2 flex items-center gap-2 text-gray-400 text-xs">
+                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                      <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+                      <span>Analyzing...</span>
+                    </div>
+                  )}
+
+                  {askError && (
+                    <div className="mx-3 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">{askError}</div>
+                  )}
+
+                  {askContent && (
+                    <div className="px-3 pb-3 pt-2">
+                      <div className="prose prose-xs max-w-none text-xs prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700 prose-p:my-1">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{askHasCitations ? askMain : askContent}</ReactMarkdown>
+                        {askStreaming && <span className="inline-block w-1.5 h-3 bg-gray-400 animate-pulse ml-0.5" />}
+                      </div>
+
+                      {askHasCitations && !askStreaming && (
+                        <div className="mt-3 border-t border-gray-200 pt-3">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Citations</span>
+                          <div className="space-y-2 mt-2">
+                            {askCitations.map(c => (
+                              <div key={c.num} className="bg-white rounded border border-gray-200 px-2 py-1.5">
+                                <div className="flex items-start gap-1.5">
+                                  <span className="text-xs font-bold text-gray-400 font-mono flex-shrink-0">[{c.num}]</span>
+                                  {c.name && <span className="text-xs font-semibold text-gray-700">{c.name}</span>}
+                                </div>
+                                {c.description && <p className="text-xs text-gray-500 leading-snug pl-5 mt-0.5">{c.description}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!askStreaming && (
+                        <div className="mt-3">
+                          <button
+                            onClick={() => insertIntoDocument(askHasCitations ? askMain : askContent)}
+                            disabled={!officeReady}
+                            className="w-full bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
+                          >
+                            Insert into Doc
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!askContent && !askStreaming && !askError && (
+                    <p className="text-xs text-gray-400 text-center mt-6 px-4">Type a request above and click a button to get recommendations.</p>
+                  )}
+                </div>
               </div>
             )}
 
