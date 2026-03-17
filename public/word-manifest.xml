@@ -6,7 +6,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>e9f3c2b1-7a4d-4e8f-b2c5-1a9d3f7e2b6c</Id>
-  <Version>1.0.0.2</Version>
+  <Version>1.0.0.3</Version>
   <ProviderName>Henry MCS</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
@@ -35,6 +35,35 @@
       <Host xsi:type="Document">
         <DesktopFormFactor>
           <FunctionFile resid="Commands.Url" />
+
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="HenryMCSGroup">
+                <Label resid="GroupLabel" />
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16" />
+                  <bt:Image size="32" resid="Icon.32x32" />
+                  <bt:Image size="80" resid="Icon.80x80" />
+                </Icon>
+                <Control xsi:type="Button" id="HenryMCSOpenPane">
+                  <Label resid="OpenPaneLabel" />
+                  <Supertip>
+                    <Title resid="OpenPaneLabel" />
+                    <Description resid="OpenPaneDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>HenryMCSPane</TaskpaneId>
+                    <SourceLocation resid="TaskPane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
 
           <ExtensionPoint xsi:type="ContextMenu">
             <OfficeMenu id="ContextMenuText">
@@ -71,12 +100,16 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Commands.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin-commands.html" />
+        <bt:Url id="TaskPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin" />
         <bt:Url id="AskPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?action=ask" />
       </bt:Urls>
       <bt:ShortStrings>
+        <bt:String id="GroupLabel" DefaultValue="Henry MCS" />
+        <bt:String id="OpenPaneLabel" DefaultValue="Henry MCS" />
         <bt:String id="AskLabel" DefaultValue="Henry MCS: Ask" />
       </bt:ShortStrings>
       <bt:LongStrings>
+        <bt:String id="OpenPaneDesc" DefaultValue="Open the Henry MCS AI assistant" />
         <bt:String id="AskDesc" DefaultValue="Ask Henry MCS about the selected text" />
       </bt:LongStrings>
     </Resources>
