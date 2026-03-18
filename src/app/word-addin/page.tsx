@@ -32,8 +32,11 @@ export default function WordAddinPage() {
   const [loginLoading, setLoginLoading] = useState(false);
 
   // Matter context
-  const [client, setClient] = useState("");
-  const [matter, setMatter] = useState("");
+  const [clients, setClients] = useState<{ id: number; client_number: string; name: string }[]>([]);
+  const [matters, setMatters] = useState<{ id: number; matter_number: string; description: string }[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedMatterId, setSelectedMatterId] = useState("");
+  const [clientMatterLoading, setClientMatterLoading] = useState(false);
 
   // Ask state
   const [askPrompt, setAskPrompt] = useState("");
@@ -72,6 +75,31 @@ export default function WordAddinPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!user) return;
+    setClientMatterLoading(true);
+    const headers: HeadersInit = {};
+    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+    fetch("/api/clients", { headers })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setClients(data))
+      .catch(() => {})
+      .finally(() => setClientMatterLoading(false));
+  }, [user]);
+
+  function handleClientChange(clientId: string) {
+    setSelectedClientId(clientId);
+    setSelectedMatterId("");
+    setMatters([]);
+    if (!clientId) return;
+    const headers: HeadersInit = {};
+    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+    fetch(`/api/clients/${clientId}/matters`, { headers })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setMatters(data))
+      .catch(() => {});
+  }
 
   async function handleLogin(e: FormEvent) {
     e.preventDefault();
@@ -164,7 +192,7 @@ export default function WordAddinPage() {
       const res = await fetch("/api/addin/summarize", {
         method: "POST",
         headers: summarizeHeaders,
-        body: JSON.stringify({ text: docText, filename: selectionOnly ? "Selection" : "Document", client, matter }),
+        body: JSON.stringify({ text: docText, filename: selectionOnly ? "Selection" : "Document", client: clientLabel, matter: matterLabel }),
       });
 
       if (!res.ok) {
@@ -230,7 +258,7 @@ export default function WordAddinPage() {
       const res = await fetch("/api/addin/recommend", {
         method: "POST",
         headers,
-        body: JSON.stringify({ text: docText, prompt: askPrompt.trim(), client, matter }),
+        body: JSON.stringify({ text: docText, prompt: askPrompt.trim(), client: clientLabel, matter: matterLabel }),
       });
 
       if (!res.ok) {
@@ -336,6 +364,12 @@ export default function WordAddinPage() {
     }
   }
 
+  const selectedClient = clients.find(c => c.id === parseInt(selectedClientId));
+  const selectedMatter = matters.find(m => m.id === parseInt(selectedMatterId));
+  const clientLabel = selectedClient ? `${selectedClient.client_number} — ${selectedClient.name}` : "";
+  const matterLabel = selectedMatter ? `${selectedMatter.matter_number} — ${selectedMatter.description}` : "";
+  const matterRequired = !selectedMatterId;
+
   const { main, citations } = parseContentAndCitations(content);
   const hasCitations = citations.length > 0;
   const { main: askMain, citations: askCitations } = parseContentAndCitations(askContent);
@@ -400,16 +434,28 @@ export default function WordAddinPage() {
 
             {/* Client / Matter context */}
             <div className="flex gap-2 px-3 py-2 bg-white border-b border-gray-100 flex-shrink-0">
-              <input
-                type="text" placeholder="Client" value={client}
-                onChange={e => setClient(e.target.value)}
-                className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-400"
-              />
-              <input
-                type="text" placeholder="Matter" value={matter}
-                onChange={e => setMatter(e.target.value)}
-                className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-400"
-              />
+              <select
+                value={selectedClientId}
+                onChange={e => handleClientChange(e.target.value)}
+                disabled={clientMatterLoading}
+                className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+              >
+                <option value="">{clientMatterLoading ? "Loading..." : "Client…"}</option>
+                {clients.map(c => (
+                  <option key={c.id} value={c.id}>{c.client_number} — {c.name}</option>
+                ))}
+              </select>
+              <select
+                value={selectedMatterId}
+                onChange={e => setSelectedMatterId(e.target.value)}
+                disabled={!selectedClientId}
+                className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-50"
+              >
+                <option value="">{selectedClientId ? "Matter…" : "Select client first"}</option>
+                {matters.map(m => (
+                  <option key={m.id} value={m.id}>{m.matter_number} — {m.description}</option>
+                ))}
+              </select>
             </div>
 
             {/* Tabs */}
@@ -435,18 +481,21 @@ export default function WordAddinPage() {
                 {!isStreaming && (
                   <div className="p-3 space-y-2 flex-shrink-0">
                     <button
-                      onClick={() => handleSummarize(false)} disabled={!officeReady}
+                      onClick={() => handleSummarize(false)} disabled={!officeReady || matterRequired}
                       className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Summarize Document
                     </button>
                     <button
-                      onClick={() => handleSummarize(true)} disabled={!officeReady}
+                      onClick={() => handleSummarize(true)} disabled={!officeReady || matterRequired}
                       className="w-full bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Summarize Selection
                     </button>
-                    {!officeReady && (
+                    {matterRequired && (
+                      <p className="text-xs text-amber-600 text-center">Select a client and matter above to continue.</p>
+                    )}
+                    {!officeReady && !matterRequired && (
                       <p className="text-xs text-gray-400 text-center">Connecting to Word...</p>
                     )}
                   </div>
@@ -544,20 +593,23 @@ export default function WordAddinPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleAsk(true)}
-                      disabled={!officeReady || !askPrompt.trim() || askStreaming}
+                      disabled={!officeReady || !askPrompt.trim() || askStreaming || matterRequired}
                       className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Ask about Selection
                     </button>
                     <button
                       onClick={() => handleAsk(false)}
-                      disabled={!officeReady || !askPrompt.trim() || askStreaming}
+                      disabled={!officeReady || !askPrompt.trim() || askStreaming || matterRequired}
                       className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Ask about Document
                     </button>
                   </div>
-                  {!officeReady && (
+                  {matterRequired && (
+                    <p className="text-xs text-amber-600 text-center">Select a client and matter above to continue.</p>
+                  )}
+                  {!officeReady && !matterRequired && (
                     <p className="text-xs text-gray-400 text-center">Connecting to Word...</p>
                   )}
                 </div>
