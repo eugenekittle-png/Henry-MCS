@@ -32,11 +32,16 @@ export default function WordAddinPage() {
   const [loginLoading, setLoginLoading] = useState(false);
 
   // Matter context
-  const [clients, setClients] = useState<{ id: number; client_number: string; name: string }[]>([]);
-  const [matters, setMatters] = useState<{ id: number; matter_number: string; description: string }[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState("");
+  type ClientRow = { id: number; client_number: string; name: string };
+  type MatterRow = { id: number; matter_number: string; description: string };
+  const [clientSearch, setClientSearch] = useState("");
+  const [clientResults, setClientResults] = useState<ClientRow[]>([]);
+  const [clientSearchLoading, setClientSearchLoading] = useState(false);
+  const [showClientResults, setShowClientResults] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null);
+  const [matters, setMatters] = useState<MatterRow[]>([]);
   const [selectedMatterId, setSelectedMatterId] = useState("");
-  const [clientMatterLoading, setClientMatterLoading] = useState(false);
+  const clientSearchTimer = useRef<any>(null);
 
   // Ask state
   const [askPrompt, setAskPrompt] = useState("");
@@ -76,29 +81,44 @@ export default function WordAddinPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    if (!user) return;
-    setClientMatterLoading(true);
-    const headers: HeadersInit = {};
-    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
-    fetch("/api/clients", { headers })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setClients(data))
-      .catch(() => {})
-      .finally(() => setClientMatterLoading(false));
-  }, [user]);
+  function handleClientSearchInput(value: string) {
+    setClientSearch(value);
+    setShowClientResults(true);
+    clearTimeout(clientSearchTimer.current);
+    if (value.length < 2) { setClientResults([]); return; }
+    clientSearchTimer.current = setTimeout(() => {
+      setClientSearchLoading(true);
+      const headers: HeadersInit = {};
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      fetch(`/api/clients?search=${encodeURIComponent(value)}`, { headers })
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setClientResults(data))
+        .catch(() => {})
+        .finally(() => setClientSearchLoading(false));
+    }, 300);
+  }
 
-  function handleClientChange(clientId: string) {
-    setSelectedClientId(clientId);
+  function handleSelectClient(client: { id: number; client_number: string; name: string }) {
+    setSelectedClient(client);
+    setClientSearch("");
+    setClientResults([]);
+    setShowClientResults(false);
     setSelectedMatterId("");
     setMatters([]);
-    if (!clientId) return;
     const headers: HeadersInit = {};
     if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
-    fetch(`/api/clients/${clientId}/matters`, { headers })
+    fetch(`/api/clients/${client.id}/matters`, { headers })
       .then(r => r.ok ? r.json() : [])
       .then(data => setMatters(data))
       .catch(() => {});
+  }
+
+  function handleClearClient() {
+    setSelectedClient(null);
+    setClientSearch("");
+    setClientResults([]);
+    setSelectedMatterId("");
+    setMatters([]);
   }
 
   async function handleLogin(e: FormEvent) {
@@ -364,11 +384,10 @@ export default function WordAddinPage() {
     }
   }
 
-  const selectedClient = clients.find(c => c.id === parseInt(selectedClientId));
   const selectedMatter = matters.find(m => m.id === parseInt(selectedMatterId));
   const clientLabel = selectedClient ? `${selectedClient.client_number} — ${selectedClient.name}` : "";
   const matterLabel = selectedMatter ? `${selectedMatter.matter_number} — ${selectedMatter.description}` : "";
-  const matterRequired = !selectedMatterId;
+  const matterRequired = !selectedClient || !selectedMatterId;
 
   const { main, citations } = parseContentAndCitations(content);
   const hasCitations = citations.length > 0;
@@ -434,24 +453,49 @@ export default function WordAddinPage() {
 
             {/* Client / Matter context */}
             <div className="flex gap-2 px-3 py-2 bg-white border-b border-gray-100 flex-shrink-0">
-              <select
-                value={selectedClientId}
-                onChange={e => handleClientChange(e.target.value)}
-                disabled={clientMatterLoading}
-                className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <option value="">{clientMatterLoading ? "Loading..." : "Client…"}</option>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>{c.client_number} — {c.name}</option>
-                ))}
-              </select>
+              {/* Client typeahead */}
+              <div className="flex-1 min-w-0 relative">
+                {selectedClient ? (
+                  <div className="flex items-center gap-1 border border-blue-300 bg-blue-50 rounded px-2 py-1">
+                    <span className="text-xs text-blue-800 truncate flex-1">{selectedClient.client_number} — {selectedClient.name}</span>
+                    <button onClick={handleClearClient} className="text-blue-400 hover:text-blue-600 flex-shrink-0 leading-none">×</button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={clientSearch}
+                      onChange={e => handleClientSearchInput(e.target.value)}
+                      onFocus={() => clientSearch.length >= 2 && setShowClientResults(true)}
+                      onBlur={() => setTimeout(() => setShowClientResults(false), 150)}
+                      placeholder="Search client…"
+                      className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    {showClientResults && (clientResults.length > 0 || clientSearchLoading) && (
+                      <div className="absolute top-full left-0 right-0 mt-0.5 bg-white border border-gray-200 rounded shadow-lg z-20 max-h-40 overflow-y-auto">
+                        {clientSearchLoading && <div className="px-2 py-1.5 text-xs text-gray-400">Searching…</div>}
+                        {clientResults.map(c => (
+                          <button
+                            key={c.id}
+                            onMouseDown={() => handleSelectClient(c)}
+                            className="w-full text-left px-2 py-1.5 text-xs text-gray-800 hover:bg-blue-50 truncate"
+                          >
+                            {c.client_number} — {c.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {/* Matter select */}
               <select
                 value={selectedMatterId}
                 onChange={e => setSelectedMatterId(e.target.value)}
-                disabled={!selectedClientId}
+                disabled={!selectedClient}
                 className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-50"
               >
-                <option value="">{selectedClientId ? "Matter…" : "Select client first"}</option>
+                <option value="">{selectedClient ? "Matter…" : "Select client first"}</option>
                 {matters.map(m => (
                   <option key={m.id} value={m.id}>{m.matter_number} — {m.description}</option>
                 ))}

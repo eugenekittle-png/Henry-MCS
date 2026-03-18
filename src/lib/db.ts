@@ -294,6 +294,16 @@ export async function getClients() {
   return result.rows as unknown as { id: number; client_number: string; name: string }[];
 }
 
+export async function searchClients(search: string) {
+  await ensureInit();
+  const term = `%${search}%`;
+  const result = await db.execute({
+    sql: "SELECT id, client_number, name FROM clients WHERE client_number LIKE ? OR name LIKE ? ORDER BY client_number LIMIT 20",
+    args: [term, term],
+  });
+  return result.rows as unknown as { id: number; client_number: string; name: string }[];
+}
+
 export async function getMattersForClient(clientId: number) {
   await ensureInit();
   const result = await db.execute({

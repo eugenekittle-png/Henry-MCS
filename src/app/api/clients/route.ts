@@ -1,9 +1,14 @@
 import { NextRequest } from "next/server";
-import { getClients, dbCreateClient } from "@/lib/db";
+import { getClients, searchClients, dbCreateClient } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAction } from "@/lib/audit";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const search = req.nextUrl.searchParams.get("search") ?? "";
+  if (search.length >= 2) {
+    const clients = await searchClients(search);
+    return Response.json(clients);
+  }
   const clients = await getClients();
   return Response.json(clients);
 }
