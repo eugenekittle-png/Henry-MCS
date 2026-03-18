@@ -31,6 +31,10 @@ export default function WordAddinPage() {
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // Matter context
+  const [client, setClient] = useState("");
+  const [matter, setMatter] = useState("");
+
   // Ask state
   const [askPrompt, setAskPrompt] = useState("");
   const [askContent, setAskContent] = useState("");
@@ -160,7 +164,7 @@ export default function WordAddinPage() {
       const res = await fetch("/api/addin/summarize", {
         method: "POST",
         headers: summarizeHeaders,
-        body: JSON.stringify({ text: docText, filename: selectionOnly ? "Selection" : "Document" }),
+        body: JSON.stringify({ text: docText, filename: selectionOnly ? "Selection" : "Document", client, matter }),
       });
 
       if (!res.ok) {
@@ -226,7 +230,7 @@ export default function WordAddinPage() {
       const res = await fetch("/api/addin/recommend", {
         method: "POST",
         headers,
-        body: JSON.stringify({ text: docText, prompt: askPrompt.trim() }),
+        body: JSON.stringify({ text: docText, prompt: askPrompt.trim(), client, matter }),
       });
 
       if (!res.ok) {
@@ -393,6 +397,20 @@ export default function WordAddinPage() {
         ) : (
           /* ── Main UI ── */
           <div className="flex-1 flex flex-col overflow-hidden">
+
+            {/* Client / Matter context */}
+            <div className="flex gap-2 px-3 py-2 bg-white border-b border-gray-100 flex-shrink-0">
+              <input
+                type="text" placeholder="Client" value={client}
+                onChange={e => setClient(e.target.value)}
+                className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-400"
+              />
+              <input
+                type="text" placeholder="Matter" value={matter}
+                onChange={e => setMatter(e.target.value)}
+                className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-gray-400"
+              />
+            </div>
 
             {/* Tabs */}
             <div className="flex border-b border-gray-200 bg-white flex-shrink-0">

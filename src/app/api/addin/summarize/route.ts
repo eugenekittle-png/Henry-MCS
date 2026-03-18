@@ -13,13 +13,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { text, filename } = await req.json();
+    const { text, filename, client, matter } = await req.json();
 
     if (!text?.trim()) {
       return Response.json({ error: "Document text is required" }, { status: 400 });
     }
 
-    const userMessage = `Here are the documents to summarize:\n\n=== ${filename || "Document"} ===\n${text}`;
+    const context = [client && `Client: ${client}`, matter && `Matter: ${matter}`].filter(Boolean).join("\n");
+    const userMessage = `${context ? context + "\n\n" : ""}Here are the documents to summarize:\n\n=== ${filename || "Document"} ===\n${text}`;
     const stream = createStream(SUMMARY_SYSTEM_PROMPT, userMessage);
 
     const encoder = new TextEncoder();
