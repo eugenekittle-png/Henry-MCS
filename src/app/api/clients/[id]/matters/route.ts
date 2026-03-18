@@ -1,14 +1,20 @@
 import { NextRequest } from "next/server";
-import { getMattersForClient, dbCreateMatter, getClient } from "@/lib/db";
+import { getMattersForClient, searchMatters, dbCreateMatter, getClient } from "@/lib/db";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const clientId = parseInt(id, 10);
   if (isNaN(clientId)) {
     return Response.json({ error: "Invalid client ID" }, { status: 400 });
+  }
+
+  const search = req.nextUrl.searchParams.get("search") ?? "";
+  if (search.length >= 2) {
+    const matters = await searchMatters(clientId, search);
+    return Response.json(matters);
   }
 
   const matters = await getMattersForClient(clientId);

@@ -39,9 +39,13 @@ export default function WordAddinPage() {
   const [clientSearchLoading, setClientSearchLoading] = useState(false);
   const [showClientResults, setShowClientResults] = useState(false);
   const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null);
-  const [matters, setMatters] = useState<MatterRow[]>([]);
-  const [selectedMatterId, setSelectedMatterId] = useState("");
+  const [matterSearch, setMatterSearch] = useState("");
+  const [matterResults, setMatterResults] = useState<MatterRow[]>([]);
+  const [matterSearchLoading, setMatterSearchLoading] = useState(false);
+  const [showMatterResults, setShowMatterResults] = useState(false);
+  const [selectedMatter, setSelectedMatter] = useState<MatterRow | null>(null);
   const clientSearchTimer = useRef<any>(null);
+  const matterSearchTimer = useRef<any>(null);
 
   // Ask state
   const [askPrompt, setAskPrompt] = useState("");
@@ -103,22 +107,49 @@ export default function WordAddinPage() {
     setClientSearch("");
     setClientResults([]);
     setShowClientResults(false);
-    setSelectedMatterId("");
-    setMatters([]);
-    const headers: HeadersInit = {};
-    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
-    fetch(`/api/clients/${client.id}/matters`, { headers })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setMatters(data))
-      .catch(() => {});
+    setSelectedMatter(null);
+    setMatterSearch("");
+    setMatterResults([]);
   }
 
   function handleClearClient() {
     setSelectedClient(null);
     setClientSearch("");
     setClientResults([]);
-    setSelectedMatterId("");
-    setMatters([]);
+    setSelectedMatter(null);
+    setMatterSearch("");
+    setMatterResults([]);
+  }
+
+  function handleMatterSearchInput(value: string) {
+    setMatterSearch(value);
+    setShowMatterResults(true);
+    clearTimeout(matterSearchTimer.current);
+    if (value.length < 2) { setMatterResults([]); return; }
+    matterSearchTimer.current = setTimeout(() => {
+      if (!selectedClient) return;
+      setMatterSearchLoading(true);
+      const headers: HeadersInit = {};
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      fetch(`/api/clients/${selectedClient.id}/matters?search=${encodeURIComponent(value)}`, { headers })
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setMatterResults(data))
+        .catch(() => {})
+        .finally(() => setMatterSearchLoading(false));
+    }, 300);
+  }
+
+  function handleSelectMatter(matter: MatterRow) {
+    setSelectedMatter(matter);
+    setMatterSearch("");
+    setMatterResults([]);
+    setShowMatterResults(false);
+  }
+
+  function handleClearMatter() {
+    setSelectedMatter(null);
+    setMatterSearch("");
+    setMatterResults([]);
   }
 
   async function handleLogin(e: FormEvent) {
@@ -384,10 +415,9 @@ export default function WordAddinPage() {
     }
   }
 
-  const selectedMatter = matters.find(m => m.id === parseInt(selectedMatterId));
   const clientLabel = selectedClient ? `${selectedClient.client_number} — ${selectedClient.name}` : "";
   const matterLabel = selectedMatter ? `${selectedMatter.matter_number} — ${selectedMatter.description}` : "";
-  const matterRequired = !selectedClient || !selectedMatterId;
+  const matterRequired = !selectedClient || !selectedMatter;
 
   const { main, citations } = parseContentAndCitations(content);
   const hasCitations = citations.length > 0;
@@ -488,18 +518,42 @@ export default function WordAddinPage() {
                   </>
                 )}
               </div>
-              {/* Matter select */}
-              <select
-                value={selectedMatterId}
-                onChange={e => setSelectedMatterId(e.target.value)}
-                disabled={!selectedClient}
-                className="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-50"
-              >
-                <option value="">{selectedClient ? "Matter…" : "Select client first"}</option>
-                {matters.map(m => (
-                  <option key={m.id} value={m.id}>{m.matter_number} — {m.description}</option>
-                ))}
-              </select>
+              {/* Matter typeahead */}
+              <div className="flex-1 min-w-0 relative">
+                {selectedMatter ? (
+                  <div className="flex items-center gap-1 border border-blue-300 bg-blue-50 rounded px-2 py-1">
+                    <span className="text-xs text-blue-800 truncate flex-1">{selectedMatter.matter_number} — {selectedMatter.description}</span>
+                    <button onClick={handleClearMatter} className="text-blue-400 hover:text-blue-600 flex-shrink-0 leading-none">×</button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={matterSearch}
+                      onChange={e => handleMatterSearchInput(e.target.value)}
+                      onFocus={() => matterSearch.length >= 2 && setShowMatterResults(true)}
+                      onBlur={() => setTimeout(() => setShowMatterResults(false), 150)}
+                      placeholder={selectedClient ? "Search matter…" : "Select client first"}
+                      disabled={!selectedClient}
+                      className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-50"
+                    />
+                    {showMatterResults && (matterResults.length > 0 || matterSearchLoading) && (
+                      <div className="absolute top-full left-0 right-0 mt-0.5 bg-white border border-gray-200 rounded shadow-lg z-20 max-h-40 overflow-y-auto">
+                        {matterSearchLoading && <div className="px-2 py-1.5 text-xs text-gray-400">Searching…</div>}
+                        {matterResults.map(m => (
+                          <button
+                            key={m.id}
+                            onMouseDown={() => handleSelectMatter(m)}
+                            className="w-full text-left px-2 py-1.5 text-xs text-gray-800 hover:bg-blue-50 truncate"
+                          >
+                            {m.matter_number} — {m.description}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Tabs */}
