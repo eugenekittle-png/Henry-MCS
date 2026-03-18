@@ -55,6 +55,12 @@ export default function AssistPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [displayMessages]);
 
+  useEffect(() => {
+    if (!isStreaming && hasMessages) {
+      inputRef.current?.focus();
+    }
+  }, [isStreaming, hasMessages]);
+
   const handleFiles = useCallback((newFiles: File[]) => {
     if (hasMessages) return; // lock files after conversation starts
     setFiles(prev => [...prev, ...newFiles]);
@@ -174,7 +180,6 @@ export default function AssistPage() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsStreaming(false);
-      inputRef.current?.focus();
     }
   }, [input, isStreaming, selectedClient, selectedMatter, files, apiHistory]);
 
