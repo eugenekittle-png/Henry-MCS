@@ -12,7 +12,7 @@ export async function GET(
   }
 
   const search = req.nextUrl.searchParams.get("search") ?? "";
-  if (search.length >= 2) {
+  if (search.length >= 1) {
     const matters = await searchMatters(clientId, search);
     return Response.json(matters);
   }

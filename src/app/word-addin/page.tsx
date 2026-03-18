@@ -89,7 +89,7 @@ export default function WordAddinPage() {
     setClientSearch(value);
     setShowClientResults(true);
     clearTimeout(clientSearchTimer.current);
-    if (value.length < 2) { setClientResults([]); return; }
+    if (value.length < 1) { setClientResults([]); return; }
     clientSearchTimer.current = setTimeout(() => {
       setClientSearchLoading(true);
       const headers: HeadersInit = {};
@@ -125,7 +125,7 @@ export default function WordAddinPage() {
     setMatterSearch(value);
     setShowMatterResults(true);
     clearTimeout(matterSearchTimer.current);
-    if (value.length < 2) { setMatterResults([]); return; }
+    if (value.length < 1) { setMatterResults([]); return; }
     matterSearchTimer.current = setTimeout(() => {
       if (!selectedClient) return;
       setMatterSearchLoading(true);
@@ -482,7 +482,7 @@ export default function WordAddinPage() {
           <div className="flex-1 flex flex-col overflow-hidden">
 
             {/* Client / Matter context */}
-            <div className="flex gap-2 px-3 py-2 bg-white border-b border-gray-100 flex-shrink-0">
+            <div className="flex flex-col gap-1.5 px-3 py-2 bg-white border-b border-gray-100 flex-shrink-0">
               {/* Client typeahead */}
               <div className="flex-1 min-w-0 relative">
                 {selectedClient ? (
@@ -496,7 +496,7 @@ export default function WordAddinPage() {
                       type="text"
                       value={clientSearch}
                       onChange={e => handleClientSearchInput(e.target.value)}
-                      onFocus={() => clientSearch.length >= 2 && setShowClientResults(true)}
+                      onFocus={() => clientSearch.length >= 1 && setShowClientResults(true)}
                       onBlur={() => setTimeout(() => setShowClientResults(false), 150)}
                       placeholder="Search client…"
                       className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -531,7 +531,7 @@ export default function WordAddinPage() {
                       type="text"
                       value={matterSearch}
                       onChange={e => handleMatterSearchInput(e.target.value)}
-                      onFocus={() => matterSearch.length >= 2 && setShowMatterResults(true)}
+                      onFocus={() => matterSearch.length >= 1 && setShowMatterResults(true)}
                       onBlur={() => setTimeout(() => setShowMatterResults(false), 150)}
                       placeholder={selectedClient ? "Search matter…" : "Select client first"}
                       disabled={!selectedClient}

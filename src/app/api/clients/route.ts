@@ -5,7 +5,7 @@ import { logAction } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get("search") ?? "";
-  if (search.length >= 2) {
+  if (search.length >= 1) {
     const clients = await searchClients(search);
     return Response.json(clients);
   }

@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
           logAction({
             username: session.username,
             action: "summarize",
-            details: { source: "word-addin", filename: filename || "Document" },
+            details: { source: "word-addin", filename: filename || "Document", client: client || undefined, matter: matter || undefined },
             tokensInput,
             tokensOutput,
             success,
