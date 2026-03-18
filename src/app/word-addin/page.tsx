@@ -497,6 +497,23 @@ export default function WordAddinPage() {
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Prompt input */}
                 <div className="p-3 space-y-2 flex-shrink-0 border-b border-gray-100">
+                  {/* Quick-prompt buttons */}
+                  <div className="flex gap-1.5">
+                    {[
+                      { label: "Rewrite", prompt: "Rewrite this in plain English and suggest improvements to formatting and clarity." },
+                      { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision." },
+                      { label: "Draft", prompt: "Draft alternative language that provides stronger protection for our client." },
+                    ].map(({ label, prompt }) => (
+                      <button
+                        key={label}
+                        onClick={() => setAskPrompt(prompt)}
+                        disabled={askStreaming}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <textarea
                     rows={3}
                     value={askPrompt}
