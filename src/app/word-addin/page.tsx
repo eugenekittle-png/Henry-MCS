@@ -8,7 +8,7 @@ import { parseContentAndCitations, citationsToMarkdown } from "@/lib/citations";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-type View = "summarize" | "ask" | "chat";
+type View = "summarize" | "ask";
 
 interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
@@ -53,12 +53,12 @@ export default function WordAddinPage() {
   const [askStreaming, setAskStreaming] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
 
-  // Chat state
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatStreaming, setChatStreaming] = useState(false);
+  // Ask follow-up state
+  const [askFollowUpMessages, setAskFollowUpMessages] = useState<ChatMessage[]>([]);
+  const [askFollowUpInput, setAskFollowUpInput] = useState("");
+  const [askFollowUpStreaming, setAskFollowUpStreaming] = useState(false);
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const askFollowUpEndRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -82,8 +82,8 @@ export default function WordAddinPage() {
   }, []);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    askFollowUpEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [askFollowUpMessages]);
 
   function handleClientSearchInput(value: string) {
     setClientSearch(value);
@@ -182,18 +182,18 @@ export default function WordAddinPage() {
     tokenRef.current = null;
     setUser(null);
     setContent("");
-    setMessages([]);
     setError(null);
     setView("summarize");
   }
 
   function handleRefresh() {
     setContent("");
-    setMessages([]);
     setError(null);
     setAskContent("");
     setAskError(null);
     setAskPrompt("");
+    setAskFollowUpMessages([]);
+    setAskFollowUpInput("");
     setView("summarize");
   }
 
@@ -217,7 +217,6 @@ export default function WordAddinPage() {
   const handleSummarize = useCallback(async (selectionOnly: boolean) => {
     if (!officeReady) return;
     setContent("");
-    setMessages([]);
     setError(null);
     setIsStreaming(true);
     setView("summarize");
@@ -348,29 +347,29 @@ export default function WordAddinPage() {
     }
   }, [officeReady, askPrompt]);
 
-  async function handleChat(e: FormEvent) {
+  async function handleAskFollowUp(e: FormEvent) {
     e.preventDefault();
-    const question = chatInput.trim();
-    if (!question || chatStreaming) return;
+    const question = askFollowUpInput.trim();
+    if (!question || askFollowUpStreaming) return;
 
-    setChatInput("");
-    const { main: summaryMain } = parseContentAndCitations(content);
+    setAskFollowUpInput("");
+    const { main: askResultMain } = parseContentAndCitations(askContent);
     const apiMessages = [
-      { role: "user" as const, content: `Here is the document summary:\n\n${summaryMain}` },
-      { role: "assistant" as const, content: "I've reviewed the summary. What questions do you have?" },
-      ...messages.map(m => ({ role: m.role, content: m.content })),
+      { role: "user" as const, content: `Here is the AI response to my request:\n\n${askResultMain}` },
+      { role: "assistant" as const, content: "I've reviewed my response. What follow-up questions do you have?" },
+      ...askFollowUpMessages.map(m => ({ role: m.role, content: m.content })),
       { role: "user" as const, content: question },
     ];
 
-    setMessages(prev => [...prev, { role: "user", content: question }]);
-    setChatStreaming(true);
+    setAskFollowUpMessages(prev => [...prev, { role: "user", content: question }]);
+    setAskFollowUpStreaming(true);
 
     try {
-      const chatHeaders: HeadersInit = { "Content-Type": "application/json" };
-      if (tokenRef.current) chatHeaders["Authorization"] = `Bearer ${tokenRef.current}`;
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: chatHeaders,
+        headers,
         body: JSON.stringify({ messages: apiMessages }),
       });
       if (!res.ok) { let m = `Failed (${res.status})`; try { const d = await res.json(); if (d.error) m = d.error; } catch { /* non-JSON */ } throw new Error(m); }
@@ -382,7 +381,7 @@ export default function WordAddinPage() {
       let buffer = "";
       let assistantContent = "";
 
-      setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+      setAskFollowUpMessages(prev => [...prev, { role: "assistant", content: "" }]);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -399,7 +398,7 @@ export default function WordAddinPage() {
             if (parsed.text) {
               assistantContent += parsed.text;
               const snap = assistantContent;
-              setMessages(prev => {
+              setAskFollowUpMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = { role: "assistant", content: snap };
                 return updated;
@@ -409,9 +408,9 @@ export default function WordAddinPage() {
         }
       }
     } catch {
-      setMessages(prev => [...prev.slice(0, -1), { role: "assistant", content: "Sorry, something went wrong." }]);
+      setAskFollowUpMessages(prev => [...prev.slice(0, -1), { role: "assistant", content: "Sorry, something went wrong." }]);
     } finally {
-      setChatStreaming(false);
+      setAskFollowUpStreaming(false);
     }
   }
 
@@ -558,16 +557,15 @@ export default function WordAddinPage() {
 
             {/* Tabs */}
             <div className="flex border-b border-gray-200 bg-white flex-shrink-0">
-              {(["summarize", "ask", "chat"] as View[]).map(v => (
+              {(["summarize", "ask"] as View[]).map(v => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
-                  disabled={v === "chat" && !content}
                   className={`flex-1 py-2 text-xs font-medium transition-colors ${
                     view === v ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"
-                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  }`}
                 >
-                  {v === "summarize" ? "Summarize" : v === "ask" ? "Ask" : "Follow-up"}
+                  {v === "summarize" ? "Summarize" : "Ask"}
                 </button>
               ))}
             </div>
@@ -578,18 +576,20 @@ export default function WordAddinPage() {
                 {/* Buttons */}
                 {!isStreaming && (
                   <div className="p-3 space-y-2 flex-shrink-0">
-                    <button
-                      onClick={() => handleSummarize(false)} disabled={!officeReady || matterRequired}
-                      className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Summarize Document
-                    </button>
-                    <button
-                      onClick={() => handleSummarize(true)} disabled={!officeReady || matterRequired}
-                      className="w-full bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Summarize Selection
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSummarize(false)} disabled={!officeReady || matterRequired}
+                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Summarize Document
+                      </button>
+                      <button
+                        onClick={() => handleSummarize(true)} disabled={!officeReady || matterRequired}
+                        className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Summarize Selection
+                      </button>
+                    </div>
                     {matterRequired && (
                       <p className="text-xs text-amber-600 text-center">Select a client and matter above to continue.</p>
                     )}
@@ -762,6 +762,48 @@ export default function WordAddinPage() {
                           </button>
                         </div>
                       )}
+
+                      {/* Follow-up chat */}
+                      {!askStreaming && (
+                        <div className="mt-4 border-t border-gray-200 pt-3">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Follow-up</p>
+                          <div className="space-y-2 mb-2">
+                            {askFollowUpMessages.map((msg, i) => {
+                              const isLast = askFollowUpStreaming && i === askFollowUpMessages.length - 1;
+                              return (
+                                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                                  <div className={`max-w-[92%] rounded-xl px-3 py-2 text-xs ${
+                                    msg.role === "user" ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-800"
+                                  }`}>
+                                    {msg.role === "assistant" ? (
+                                      <div className="prose prose-xs max-w-none prose-p:my-0.5 prose-p:text-gray-800">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                                        {isLast && <span className="inline-block w-1 h-3 bg-gray-400 animate-pulse ml-0.5" />}
+                                      </div>
+                                    ) : msg.content}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            <div ref={askFollowUpEndRef} />
+                          </div>
+                          <form onSubmit={handleAskFollowUp} className="flex items-end border border-gray-200 rounded-lg bg-white overflow-hidden">
+                            <textarea
+                              rows={2}
+                              value={askFollowUpInput}
+                              onChange={e => setAskFollowUpInput(e.target.value)}
+                              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAskFollowUp(e as unknown as FormEvent); } }}
+                              placeholder="Ask a follow-up question..."
+                              disabled={askFollowUpStreaming}
+                              className="flex-1 px-3 py-2 text-xs text-gray-900 focus:outline-none disabled:opacity-50 resize-none"
+                            />
+                            <button
+                              type="submit" disabled={!askFollowUpInput.trim() || askFollowUpStreaming}
+                              className="px-3 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-30 self-end"
+                            >Send</button>
+                          </form>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -769,75 +811,6 @@ export default function WordAddinPage() {
                     <p className="text-xs text-gray-400 text-center mt-6 px-4">Type a request above and click a button to get recommendations.</p>
                   )}
                 </div>
-              </div>
-            )}
-
-            {/* ── Chat view ── */}
-            {view === "chat" && (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                  {messages.length === 0 && (
-                    <p className="text-xs text-gray-400 text-center mt-6">Ask a follow-up question about the summary.</p>
-                  )}
-                  {messages.map((msg, i) => {
-                    const isLast = chatStreaming && i === messages.length - 1;
-                    const { main: msgMain, citations: msgCitations } = msg.role === "assistant"
-                      ? parseContentAndCitations(msg.content)
-                      : { main: msg.content, citations: [] };
-                    const msgHasCitations = msgCitations.length > 0;
-
-                    return (
-                      <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[92%] rounded-xl px-3 py-2 text-xs ${
-                          msg.role === "user" ? "bg-blue-600 text-white" : "bg-white border border-gray-200 text-gray-800"
-                        }`}>
-                          {msg.role === "assistant" ? (
-                            <>
-                              <div className="prose prose-xs max-w-none prose-p:my-0.5 prose-p:text-gray-800">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msgHasCitations ? msgMain : msg.content}</ReactMarkdown>
-                                {isLast && <span className="inline-block w-1 h-3 bg-gray-400 animate-pulse ml-0.5" />}
-                              </div>
-                              {msgHasCitations && !isLast && (
-                                <div className="mt-2 pt-2 border-t border-gray-200">
-                                  <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Citations</span>
-                                  </div>
-                                  <div className="space-y-1.5">
-                                    {msgCitations.map(c => (
-                                      <div key={c.num} className="bg-gray-50 rounded border border-gray-200 px-2 py-1">
-                                        <div className="flex items-start gap-1">
-                                          <span className="text-xs font-bold text-gray-400 font-mono flex-shrink-0">[{c.num}]</span>
-                                          {c.name && <span className="text-xs font-semibold text-gray-700">{c.name}</span>}
-                                        </div>
-                                        {c.description && <p className="text-xs text-gray-500 pl-4 mt-0.5">{c.description}</p>}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          ) : msg.content}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div ref={chatEndRef} />
-                </div>
-
-                <form onSubmit={handleChat} className="flex items-end border-t border-gray-200 bg-white flex-shrink-0">
-                  <textarea
-                    rows={2} value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleChat(e as unknown as FormEvent); } }}
-                    placeholder="Ask a follow-up question..."
-                    disabled={chatStreaming}
-                    className="flex-1 px-3 py-2 text-xs text-gray-900 focus:outline-none disabled:opacity-50 resize-none"
-                  />
-                  <button
-                    type="submit" disabled={!chatInput.trim() || chatStreaming}
-                    className="px-3 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-30 self-end"
-                  >Send</button>
-                </form>
               </div>
             )}
           </div>
