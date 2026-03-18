@@ -36,6 +36,8 @@ export default function WordAddinPage() {
   const [askContent, setAskContent] = useState("");
   const [askStreaming, setAskStreaming] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -198,6 +200,36 @@ export default function WordAddinPage() {
       setIsStreaming(false);
     }
   }, [officeReady]);
+
+  function toggleDictation() {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setAskError("Speech recognition is not supported in this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results as any[])
+        .slice(event.resultIndex)
+        .map((r: any) => r[0].transcript)
+        .join(" ")
+        .trim();
+      if (transcript) setAskPrompt(prev => (prev ? prev + " " + transcript : transcript).trim());
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }
 
   const handleAsk = useCallback(async (selectionOnly: boolean) => {
     if (!officeReady || !askPrompt.trim()) return;
@@ -514,14 +546,31 @@ export default function WordAddinPage() {
                       </button>
                     ))}
                   </div>
-                  <textarea
-                    rows={3}
-                    value={askPrompt}
-                    onChange={e => setAskPrompt(e.target.value)}
-                    placeholder="What would you like to know or do? e.g. &quot;What are the risks in this clause?&quot; or &quot;Suggest improvements to this paragraph.&quot;"
-                    disabled={askStreaming}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 resize-none"
-                  />
+                  <div className="relative">
+                    <textarea
+                      rows={3}
+                      value={askPrompt}
+                      onChange={e => setAskPrompt(e.target.value)}
+                      placeholder="What would you like to know or do? e.g. &quot;What are the risks in this clause?&quot; or &quot;Suggest improvements to this paragraph.&quot;"
+                      disabled={askStreaming}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-9 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 resize-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={toggleDictation}
+                      disabled={askStreaming}
+                      title={isListening ? "Stop dictation" : "Dictate your request"}
+                      className={`absolute bottom-2 right-2 p-1 rounded-full transition-colors disabled:opacity-40 ${
+                        isListening
+                          ? "text-red-500 bg-red-50 hover:bg-red-100 animate-pulse"
+                          : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zm7 8a1 1 0 0 1 1 1 8 8 0 0 1-7 7.938V21h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-1.062A8 8 0 0 1 4 12a1 1 0 1 1 2 0 6 6 0 0 0 12 0 1 1 0 0 1 1-1z"/>
+                      </svg>
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleAsk(true)}
