@@ -1,7 +1,10 @@
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
-// Disable the worker in Node.js — parsing runs in-process
-pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+// Point to the bundled worker so pdfjs doesn't complain in Node.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/legacy/build/pdf.worker.mjs",
+  import.meta.url
+).href;
 
 export async function parsePdf(buffer: Buffer): Promise<string> {
   const loadingTask = pdfjsLib.getDocument({
