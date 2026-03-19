@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import StreamingResponse from "@/components/StreamingResponse";
@@ -10,18 +11,18 @@ import type { DiffLine } from "@/components/DiffDisplay";
 import type { Client, Matter } from "@/types";
 
 export default function ComparePage() {
+  const [diffLines, setDiffLines] = useSessionState<DiffLine[]>("compare:diffLines", []);
+  const [diffFile1Name, setDiffFile1Name] = useSessionState<string>("compare:diffFile1Name", "");
+  const [diffFile2Name, setDiffFile2Name] = useSessionState<string>("compare:diffFile2Name", "");
+  const [summaryContent, setSummaryContent] = useSessionState<string>("compare:summaryContent", "");
+  const [selectedClient, setSelectedClient] = useSessionState<Client | null>("compare:selectedClient", null);
+  const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("compare:selectedMatter", null);
   const [file1, setFile1] = useState<File | null>(null);
   const [file2, setFile2] = useState<File | null>(null);
   const [includeSummary, setIncludeSummary] = useState(false);
-  const [diffLines, setDiffLines] = useState<DiffLine[]>([]);
-  const [diffFile1Name, setDiffFile1Name] = useState("");
-  const [diffFile2Name, setDiffFile2Name] = useState("");
-  const [summaryContent, setSummaryContent] = useState("");
   const [isComparing, setIsComparing] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [selectedMatter, setSelectedMatter] = useState<Matter | null>(null);
 
   const handleFile1 = useCallback((files: File[]) => {
     setFile1(files[0] || null);

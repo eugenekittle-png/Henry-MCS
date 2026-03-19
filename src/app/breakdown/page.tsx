@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import StreamingResponse from "@/components/StreamingResponse";
@@ -9,12 +10,12 @@ import SummaryChat from "@/components/SummaryChat";
 import type { Client, Matter } from "@/types";
 
 export default function BreakdownPage() {
+  const [content, setContent] = useSessionState<string>("breakdown:content", "");
+  const [selectedClient, setSelectedClient] = useSessionState<Client | null>("breakdown:selectedClient", null);
+  const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("breakdown:selectedMatter", null);
   const [files, setFiles] = useState<File[]>([]);
-  const [content, setContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [selectedMatter, setSelectedMatter] = useState<Matter | null>(null);
 
   const handleFiles = useCallback((newFiles: File[]) => {
     setFiles(newFiles.slice(0, 1)); // only one zip

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import StreamingResponse from "@/components/StreamingResponse";
@@ -11,13 +12,13 @@ import type { EdgarFiling } from "@/components/EdgarBrowser";
 import type { Client, Matter } from "@/types";
 
 export default function SummaryPage() {
+  const [content, setContent] = useSessionState<string>("summary:content", "");
+  const [selectedClient, setSelectedClient] = useSessionState<Client | null>("summary:selectedClient", null);
+  const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("summary:selectedMatter", null);
   const [files, setFiles] = useState<File[]>([]);
   const [edgarFilings, setEdgarFilings] = useState<EdgarFiling[]>([]);
-  const [content, setContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [selectedMatter, setSelectedMatter] = useState<Matter | null>(null);
 
   const handleFiles = useCallback((newFiles: File[]) => {
     setFiles((prev) => [...prev, ...newFiles]);

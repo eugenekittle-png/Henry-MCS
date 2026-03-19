@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, FormEvent } from "react";
+import { useSessionState } from "@/lib/useSessionState";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import FileDropZone from "@/components/FileDropZone";
@@ -36,14 +37,14 @@ interface ApiMessage {
 }
 
 export default function AssistPage() {
-  const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([]);
-  const [apiHistory, setApiHistory] = useState<ApiMessage[]>([]);
+  const [displayMessages, setDisplayMessages] = useSessionState<DisplayMessage[]>("assist:displayMessages", []);
+  const [apiHistory, setApiHistory] = useSessionState<ApiMessage[]>("assist:apiHistory", []);
+  const [selectedClient, setSelectedClient] = useSessionState<Client | null>("assist:selectedClient", null);
+  const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("assist:selectedMatter", null);
   const [files, setFiles] = useState<File[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [selectedMatter, setSelectedMatter] = useState<Matter | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
