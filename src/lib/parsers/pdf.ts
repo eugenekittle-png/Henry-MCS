@@ -1,7 +1,27 @@
-import pdfParse from "pdf-parse";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+
+// Disable the worker in Node.js — parsing runs in-process
+pdfjsLib.GlobalWorkerOptions.workerSrc = "";
 
 export async function parsePdf(buffer: Buffer): Promise<string> {
-  // pdf-parse v1 expects a Buffer and returns {text, numpages, info}
-  const data = await pdfParse(buffer);
-  return data.text;
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(buffer),
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+  });
+
+  const pdf = await loadingTask.promise;
+  const pages: string[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ");
+    pages.push(pageText);
+  }
+
+  return pages.join("\n\n");
 }
