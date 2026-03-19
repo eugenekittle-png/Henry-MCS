@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const userMessage = `${contextPrefix}**Playbook: ${playbook.name}**\n\nChecklist items:\n${playbookText}\n\n---\n\n**Document to review:**\n\n=== ${file.name} ===\n${text}`;
+    const userMessage = `${contextPrefix}**Playbook: ${playbook.name}**\n\nChecklist items:\n${playbookText}\n\n---\n\n**Document to review:**\n\n<documents>\n=== ${file.name} ===\n${text}\n</documents>`;
 
     const stream = createStream(PLAYBOOK_REVIEW_SYSTEM_PROMPT, userMessage);
     const encoder = new TextEncoder();

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { parseFile } from "@/lib/parsers";
 import { createChatStream } from "@/lib/anthropic";
 import { ASSIST_SYSTEM_PROMPT, MAX_FILE_SIZE, SUPPORTED_EXTENSIONS } from "@/lib/constants";
+import { detectSuspicious } from "@/lib/security";
 import { getClient, getMatter } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAction } from "@/lib/audit";
@@ -53,11 +54,13 @@ export async function POST(req: NextRequest) {
       if (file.size > MAX_FILE_SIZE) continue;
       const buffer = Buffer.from(await file.arrayBuffer());
       const text = await parseFile(buffer, file.name);
-      documentContext += `=== ${file.name} ===\n${text}\n\n---\n\n`;
+      documentContext += `=== ${file.name} ===\n${text}\n\n`;
       fileNames.push(file.name);
     }
 
-    const userContent = `${contextPrefix}${documentContext ? `The following documents have been provided for context:\n\n${documentContext}` : ""}${prompt}`;
+    const suspiciousFlags = detectSuspicious(prompt);
+
+    const userContent = `${contextPrefix}${documentContext ? `The following documents have been provided for context:\n\n<documents>\n${documentContext}</documents>\n\n` : ""}${prompt}`;
 
     const apiMessages: MessageParam[] = [
       ...history,
@@ -99,7 +102,11 @@ export async function POST(req: NextRequest) {
             action: "assist",
             clientNumber,
             matterNumber,
-            details: { prompt: prompt.slice(0, 200), files: fileNames },
+            details: {
+              prompt: suspiciousFlags.length > 0 ? prompt : prompt.slice(0, 200),
+              files: fileNames,
+              ...(suspiciousFlags.length > 0 ? { suspicious: true, suspiciousFlags } : {}),
+            },
             tokensInput,
             tokensOutput,
             success,

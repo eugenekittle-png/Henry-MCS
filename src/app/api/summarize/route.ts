@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const userMessage = `${contextPrefix}Here are the documents to summarize:\n\n${combinedContent}`;
+    const userMessage = `${contextPrefix}Here are the documents to summarize:\n\n<documents>\n${combinedContent}\n</documents>`;
     const stream = createStream(SUMMARY_SYSTEM_PROMPT, userMessage);
 
     const encoder = new TextEncoder();
