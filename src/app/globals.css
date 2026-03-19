@@ -16,4 +16,6 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-size: 1.375rem;
+  line-height: 1.875;
 }

@@ -221,7 +221,7 @@ export default function ReviewPage() {
             </div>
           )}
 
-          <div className="bg-white border border-gray-200 rounded-xl p-6 prose prose-sm max-w-none prose-headings:font-semibold prose-h2:text-base prose-h2:border-b prose-h2:border-gray-100 prose-h2:pb-2 prose-strong:font-semibold">
+          <div className="bg-gray-100 text-sm text-gray-800 rounded-xl p-6 prose prose-xl max-w-none font-sans prose-p:my-1 prose-headings:font-semibold prose-h2:border-b prose-h2:border-gray-100 prose-h2:pb-2 prose-strong:font-semibold leading-[1.98]">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
             {isStreaming && <span className="inline-block w-1.5 h-4 bg-gray-400 animate-pulse ml-0.5 align-middle" />}
           </div>

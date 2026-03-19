@@ -260,7 +260,7 @@ export default function AssistPage() {
                   >
                     {msg.role === "assistant" ? (
                       <>
-                        <div className="prose prose-base max-w-none prose-p:text-gray-800 prose-p:my-1 prose-headings:text-gray-900 prose-li:text-gray-800">
+                        <div className="prose prose-xl max-w-none prose-p:text-gray-800 prose-p:my-1 prose-headings:text-gray-900 prose-li:text-gray-800 leading-[1.98]">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{ img: () => null }}

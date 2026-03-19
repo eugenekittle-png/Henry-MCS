@@ -149,7 +149,7 @@ export default function SummaryChat({ summaryContent, documentNames }: SummaryCh
                   {msg.role === "assistant" ? (
                     <>
                       {/* Main response content */}
-                      <div className="prose prose-sm max-w-none prose-p:text-gray-800 prose-p:my-1 prose-headings:text-gray-900 prose-li:text-gray-800">
+                      <div className="prose prose-xl max-w-none font-sans prose-p:text-gray-800 prose-p:my-1 prose-headings:text-gray-900 prose-li:text-gray-800 leading-[1.98]">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {hasCitations ? main : msg.content}
                         </ReactMarkdown>

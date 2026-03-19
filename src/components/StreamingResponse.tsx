@@ -87,7 +87,7 @@ export default function StreamingResponse({
       {/* Main content */}
       <div
         ref={containerRef}
-        className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl p-6 max-h-[70vh] overflow-y-auto"
+        className="flex-1 min-w-0 bg-gray-100 text-sm text-gray-800 rounded-xl p-6 max-h-[70vh] overflow-y-auto"
       >
         {isStreaming && !content && (
           <div className="flex items-center gap-2 text-gray-500">
@@ -99,7 +99,7 @@ export default function StreamingResponse({
             <span className="text-sm">Analyzing documents...</span>
           </div>
         )}
-        <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700 prose-strong:text-gray-900">
+        <div className="prose prose-xl max-w-none font-sans prose-p:my-1 prose-headings:text-gray-900 prose-p:text-gray-800 prose-li:text-gray-800 prose-strong:text-gray-900 leading-[1.98]">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{hasCitations ? main : content}</ReactMarkdown>
         </div>
         {isStreaming && content && (
