@@ -8,6 +8,7 @@ interface FileDropZoneProps {
   accept?: string;
   multiple?: boolean;
   label?: string;
+  maxFileSize?: number;
 }
 
 export default function FileDropZone({
@@ -15,6 +16,7 @@ export default function FileDropZone({
   accept,
   multiple = true,
   label = "Drop files here or click to browse",
+  maxFileSize = MAX_FILE_SIZE,
 }: FileDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +37,8 @@ export default function FileDropZone({
           setError(`Unsupported file type: ${file.name}`);
           continue;
         }
-        if (file.size > MAX_FILE_SIZE) {
-          setError(`File too large: ${file.name} (max 10MB)`);
+        if (file.size > maxFileSize) {
+          setError(`File too large: ${file.name} (max ${Math.round(maxFileSize / 1024 / 1024)}MB)`);
           continue;
         }
         valid.push(file);
@@ -44,7 +46,7 @@ export default function FileDropZone({
 
       return valid;
     },
-    [accept]
+    [accept, maxFileSize]
   );
 
   const handleDrop = useCallback(
@@ -102,7 +104,7 @@ export default function FileDropZone({
           {accept
             ? `Supported: ${accept.split(",").map((e) => e.trim().replace(".", "").toUpperCase()).join(", ")}`
             : "Supported: PDF, DOCX, XLSX, PPTX, TXT, MD, CSV"}{" "}
-          (max 10MB)
+          (max {Math.round(maxFileSize / 1024 / 1024)}MB)
         </p>
         <input
           ref={inputRef}

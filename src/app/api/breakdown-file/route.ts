@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
-import { parseZip } from "@/lib/parsers/zip";
+import JSZip from "jszip";
+import { parseFile } from "@/lib/parsers";
 import { createStream } from "@/lib/anthropic";
-import { BREAKDOWN_SYSTEM_PROMPT, MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
+import { SUMMARY_SYSTEM_PROMPT, MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
 import { getClient, getMatter } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAction } from "@/lib/audit";
@@ -17,23 +18,35 @@ export async function POST(req: NextRequest) {
 
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+    const zipFile = formData.get("file") as File | null;
+    const filePath = formData.get("filePath") as string | null;
 
-    if (!file) return Response.json({ error: "No file provided" }, { status: 400 });
+    if (!zipFile) return Response.json({ error: "No file provided" }, { status: 400 });
+    if (!filePath) return Response.json({ error: "No filePath specified" }, { status: 400 });
+    if (zipFile.size > MAX_BREAKDOWN_FILE_SIZE) return Response.json({ error: "File too large (max 50MB)" }, { status: 400 });
 
-    const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-    if (ext !== ".zip") return Response.json({ error: "Please upload a .zip file" }, { status: 400 });
-    if (file.size > MAX_BREAKDOWN_FILE_SIZE) return Response.json({ error: "File too large (max 50MB)" }, { status: 400 });
+    const buffer = Buffer.from(await zipFile.arrayBuffer());
+    const zip = await JSZip.loadAsync(buffer);
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const entry = zip.files[filePath];
+    if (!entry || entry.dir) return Response.json({ error: `File not found in zip: ${filePath}` }, { status: 404 });
 
-    const clientId = formData.get("clientId");
-    const matterId = formData.get("matterId");
+    const fileBuffer = Buffer.from(await entry.async("arraybuffer"));
+    const fileName = filePath.split("/").pop() || filePath;
+
+    let text: string;
+    try {
+      text = await parseFile(fileBuffer, fileName);
+    } catch {
+      return Response.json({ error: `Could not parse ${fileName}` }, { status: 400 });
+    }
+
     let contextPrefix = "";
-    const contextDetails: Record<string, unknown> = { file: file.name };
+    const contextDetails: Record<string, unknown> = { zipFile: zipFile.name, file: filePath };
     let clientNumber: string | null = null;
     let matterNumber: string | null = null;
-
+    const clientId = formData.get("clientId");
+    const matterId = formData.get("matterId");
     if (clientId && matterId) {
       const client = await getClient(parseInt(clientId as string, 10));
       const matter = await getMatter(parseInt(matterId as string, 10));
@@ -44,6 +57,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const userMessage = `${contextPrefix}Here is the document to summarize:\n\n<documents>\n=== ${fileName} ===\n${text}\n</documents>`;
+    const stream = createStream(SUMMARY_SYSTEM_PROMPT, userMessage);
+
     const encoder = new TextEncoder();
     let tokensInput = 0;
     let tokensOutput = 0;
@@ -52,29 +68,6 @@ export async function POST(req: NextRequest) {
       async start(controller) {
         let success = true;
         try {
-          // Phase 1: parse files with progress events
-          emit(controller, encoder, { progress: { stage: "parsing", current: 0, total: 0, file: "" } });
-
-          const documents = await parseZip(buffer, (current, total, name) => {
-            emit(controller, encoder, { progress: { stage: "parsing", current, total, file: name } });
-          });
-
-          if (!documents.length) {
-            emit(controller, encoder, { error: "No supported documents found in the zip file" });
-            controller.close();
-            return;
-          }
-
-          contextDetails.documentCount = documents.length;
-
-          // Phase 2: send to Claude
-          emit(controller, encoder, { progress: { stage: "analyzing", current: documents.length, total: documents.length, file: "" } });
-
-          const documentTexts = documents.map(doc => `=== ${doc.name} (${doc.type}) ===\n${doc.content}`);
-          const combinedContent = documentTexts.join("\n\n---\n\n");
-          const userMessage = `${contextPrefix}Here is a collection of ${documents.length} documents extracted from a zip file. Please catalog and analyze them:\n\n<documents>\n${combinedContent}\n</documents>`;
-          const stream = createStream(BREAKDOWN_SYSTEM_PROMPT, userMessage);
-
           for await (const event of stream) {
             if (event.type === "message_start") {
               tokensInput = event.message.usage.input_tokens;
@@ -84,7 +77,6 @@ export async function POST(req: NextRequest) {
               emit(controller, encoder, { text: event.delta.text });
             }
           }
-
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         } catch (err) {
@@ -93,7 +85,7 @@ export async function POST(req: NextRequest) {
           emit(controller, encoder, { error: message });
           controller.close();
         } finally {
-          logAction({ username: session?.username ?? null, action: "breakdown", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success });
+          logAction({ username: session?.username ?? null, action: "breakdown-file", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success });
         }
       },
     });
@@ -103,7 +95,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session?.username ?? null, action: "breakdown", details: { error: message }, success: false });
+    logAction({ username: session?.username ?? null, action: "breakdown-file", details: { error: message }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }
