@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (user) {
     const sameAsOld = await verifyPassword(password, user.password_hash);
     if (sameAsOld) {
-      await logAction({ username: session.username, action: "change_password", details: { reason: "same as current password" }, success: false });
+      await logAction({ username: session.username, action: "Change-Password", details: { reason: "same as current password" }, success: false });
       return NextResponse.json({ error: "New password cannot be the same as your current password" }, { status: 400 });
     }
   }
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     mustChangePassword: false,
   });
 
-  await logAction({ username: session.username, action: "change_password", success: true });
+  await logAction({ username: session.username, action: "Change-Password", success: true });
 
   return NextResponse.json({ ok: true });
 }

@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session.username, action: "recommend", details: { error: message, source: "word-addin" }, success: false });
+    logAction({ username: session.username, action: "Recommend", details: { error: message, source: "word-addin" }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }

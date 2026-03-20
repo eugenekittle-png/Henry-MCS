@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
         } finally {
           logAction({
             username: session.username,
-            action: "summarize",
+            action: "Summarize",
             details: { source: "word-addin", filename: filename || "Document", client: client || undefined, matter: matter || undefined },
             tokensInput,
             tokensOutput,
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session.username, action: "summarize", details: { error: message, source: "word-addin" }, success: false });
+    logAction({ username: session.username, action: "Summarize", details: { error: message, source: "word-addin" }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }

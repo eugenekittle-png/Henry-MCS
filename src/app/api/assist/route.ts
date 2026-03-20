@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
         } finally {
           logAction({
             username: session?.username ?? null,
-            action: "assist",
+            action: "Assist",
             clientNumber,
             matterNumber,
             details: {
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session?.username ?? null, action: "assist", details: { error: message }, success: false });
+    logAction({ username: session?.username ?? null, action: "Assist", details: { error: message }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }

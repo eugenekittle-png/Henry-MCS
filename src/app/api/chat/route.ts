@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
         } finally {
           logAction({
             username: session?.username ?? null,
-            action: "chat",
+            action: "Chat",
             details: {
               question: suspiciousFlags.length > 0 ? question : question.slice(0, 200),
               ...(suspiciousFlags.length > 0 ? { suspicious: true, suspiciousFlags } : {}),
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session?.username ?? null, action: "chat", details: { error: message }, success: false });
+    logAction({ username: session?.username ?? null, action: "Chat", details: { error: message }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }

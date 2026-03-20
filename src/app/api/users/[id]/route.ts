@@ -38,7 +38,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     changes.passwordReset = true;
   }
 
-  await logAction({ username: session.username, action: "user_update", details: changes, success: true });
+  await logAction({ username: session.username, action: "User-Update", details: changes, success: true });
   const updated = await getUser(userId);
   return NextResponse.json(updated);
 }
@@ -62,6 +62,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
 
   await deleteUser(userId);
-  await logAction({ username: session.username, action: "user_delete", details: { targetUser: user.username }, success: true });
+  await logAction({ username: session.username, action: "User-Delete", details: { targetUser: user.username }, success: true });
   return NextResponse.json({ ok: true });
 }

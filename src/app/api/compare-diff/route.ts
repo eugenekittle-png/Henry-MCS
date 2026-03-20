@@ -76,12 +76,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await logAction({ username: session?.username ?? null, action: "compare_diff", clientNumber, matterNumber, details, success: true });
+    await logAction({ username: session?.username ?? null, action: "Compare-Diff", clientNumber, matterNumber, details, success: true });
 
     return Response.json({ file1Name: file1.name, file2Name: file2.name, lines });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    await logAction({ username: session?.username ?? null, action: "compare_diff", details: { error: message }, success: false });
+    await logAction({ username: session?.username ?? null, action: "Compare-Diff", details: { error: message }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }

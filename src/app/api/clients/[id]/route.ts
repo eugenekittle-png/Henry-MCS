@@ -20,12 +20,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!client_number || !name) return Response.json({ error: "Client number and name are required" }, { status: 400 });
 
     const updated = await updateClient(clientId, client_number, name);
-    await logAction({ username: session?.username ?? null, action: "client_update", details: { clientId, clientNumber: client_number, name }, success: true });
+    await logAction({ username: session?.username ?? null, action: "Client-Update", details: { clientId, clientNumber: client_number, name }, success: true });
     return Response.json(updated);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update client";
     const status = message.includes("UNIQUE") ? 409 : 500;
-    await logAction({ username: session?.username ?? null, action: "client_update", details: { error: message }, success: false });
+    await logAction({ username: session?.username ?? null, action: "Client-Update", details: { error: message }, success: false });
     return Response.json({ error: message }, { status });
   }
 }
@@ -43,6 +43,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!existing) return Response.json({ error: "Client not found" }, { status: 404 });
 
   await deleteClient(clientId);
-  await logAction({ username: session?.username ?? null, action: "client_delete", details: { clientId, clientNumber: existing.client_number, name: existing.name }, success: true });
+  await logAction({ username: session?.username ?? null, action: "Client-Delete", details: { clientId, clientNumber: existing.client_number, name: existing.name }, success: true });
   return Response.json({ success: true });
 }

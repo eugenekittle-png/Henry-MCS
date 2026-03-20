@@ -5,6 +5,6 @@ import { logAction } from "@/lib/audit";
 export async function POST() {
   const session = await getSession();
   await clearSessionCookie();
-  await logAction({ username: session?.username ?? null, action: "logout", success: true });
+  await logAction({ username: session?.username ?? null, action: "Logout", success: true });
   return NextResponse.json({ ok: true });
 }

@@ -39,6 +39,6 @@ export async function POST(request: NextRequest) {
 
   const passwordHash = await hashPassword(password);
   const user = await dbCreateUser(username, passwordHash, role);
-  await logAction({ username: session.username, action: "user_create", details: { targetUser: username.toLowerCase(), role }, success: true });
+  await logAction({ username: session.username, action: "User-Create", details: { targetUser: username.toLowerCase(), role }, success: true });
   return NextResponse.json(user, { status: 201 });
 }

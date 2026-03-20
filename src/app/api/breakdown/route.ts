@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
           emit(controller, encoder, { error: message });
           controller.close();
         } finally {
-          logAction({ username: session?.username ?? null, action: "breakdown", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success });
+          logAction({ username: session?.username ?? null, action: "Breakdown", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success });
         }
       },
     });
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session?.username ?? null, action: "breakdown", details: { error: message }, success: false });
+    logAction({ username: session?.username ?? null, action: "Breakdown", details: { error: message }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }

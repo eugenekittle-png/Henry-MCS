@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`));
           controller.close();
         } finally {
-          logAction({ username: session?.username ?? null, action: "compare", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success });
+          logAction({ username: session?.username ?? null, action: "Compare", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success });
         }
       },
     });
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session?.username ?? null, action: "compare", details: { error: message }, success: false });
+    logAction({ username: session?.username ?? null, action: "Compare", details: { error: message }, success: false });
     return Response.json({ error: message }, { status: 500 });
   }
 }
