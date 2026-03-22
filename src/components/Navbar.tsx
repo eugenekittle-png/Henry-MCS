@@ -55,9 +55,6 @@ export default function Navbar() {
           <Link href="/assist" className={linkClass("/assist")}>
             Assist
           </Link>
-          <Link href="/summary" className={linkClass("/summary")}>
-            Summary
-          </Link>
           <Link href="/breakdown" className={linkClass("/breakdown")}>
             Breakdown
           </Link>
