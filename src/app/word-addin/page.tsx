@@ -4,11 +4,9 @@ import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import Script from "next/script";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { parseContentAndCitations, citationsToMarkdown } from "@/lib/citations";
+import { parseContentAndCitations } from "@/lib/citations";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-type View = "summarize" | "ask";
 
 interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
@@ -18,13 +16,6 @@ export default function WordAddinPage() {
   const [officeReady, setOfficeReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [view, setView] = useState<View>("summarize");
-
-  // Summarize state
-  const [content, setContent] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   // Login state
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -60,13 +51,6 @@ export default function WordAddinPage() {
 
   const askFollowUpEndRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("action") === "ask") {
-      setView("ask");
-    }
-  }, []);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -181,20 +165,14 @@ export default function WordAddinPage() {
     await fetch("/api/auth/logout", { method: "POST" });
     tokenRef.current = null;
     setUser(null);
-    setContent("");
-    setError(null);
-    setView("summarize");
   }
 
   function handleRefresh() {
-    setContent("");
-    setError(null);
     setAskContent("");
     setAskError(null);
     setAskPrompt("");
     setAskFollowUpMessages([]);
     setAskFollowUpInput("");
-    setView("summarize");
   }
 
   async function getDocumentText(selectionOnly: boolean): Promise<string> {
@@ -213,73 +191,6 @@ export default function WordAddinPage() {
       await context.sync();
     });
   }
-
-  const handleSummarize = useCallback(async (selectionOnly: boolean) => {
-    if (!officeReady) return;
-    setContent("");
-    setError(null);
-    setIsStreaming(true);
-    setView("summarize");
-
-    let docText = "";
-    try {
-      docText = await getDocumentText(selectionOnly);
-    } catch {
-      setError("Could not read the document. Make sure a Word document is open.");
-      setIsStreaming(false);
-      return;
-    }
-
-    if (!docText.trim()) {
-      setError(selectionOnly ? "No text is selected." : "The document appears to be empty.");
-      setIsStreaming(false);
-      return;
-    }
-
-    try {
-      const summarizeHeaders: HeadersInit = { "Content-Type": "application/json" };
-      if (tokenRef.current) summarizeHeaders["Authorization"] = `Bearer ${tokenRef.current}`;
-      const res = await fetch("/api/addin/summarize", {
-        method: "POST",
-        headers: summarizeHeaders,
-        body: JSON.stringify({ text: docText, filename: selectionOnly ? "Selection" : "Document", client: clientLabel, matter: matterLabel }),
-      });
-
-      if (!res.ok) {
-        let errMsg = `Request failed (${res.status})`;
-        try { const data = await res.json(); if (data.error) errMsg = data.error; } catch { /* non-JSON response */ }
-        throw new Error(errMsg);
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response stream");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6);
-          if (data === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.error) { setError(parsed.error); setIsStreaming(false); return; }
-            if (parsed.text) setContent(prev => prev + parsed.text);
-          } catch { /* skip */ }
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setIsStreaming(false);
-    }
-  }, [officeReady]);
 
   const handleAsk = useCallback(async (selectionOnly: boolean) => {
     if (!officeReady || !askPrompt.trim()) return;
@@ -418,8 +329,6 @@ export default function WordAddinPage() {
   const matterLabel = selectedMatter ? `${selectedMatter.matter_number} — ${selectedMatter.description}` : "";
   const matterRequired = !selectedClient || !selectedMatter;
 
-  const { main, citations } = parseContentAndCitations(content);
-  const hasCitations = citations.length > 0;
   const { main: askMain, citations: askCitations } = parseContentAndCitations(askContent);
   const askHasCitations = askCitations.length > 0;
 
@@ -555,111 +464,8 @@ export default function WordAddinPage() {
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 bg-white flex-shrink-0">
-              {(["summarize", "ask"] as View[]).map(v => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                    view === v ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  {v === "summarize" ? "Summarize" : "Ask"}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Summarize view ── */}
-            {view === "summarize" && (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Buttons */}
-                {!isStreaming && (
-                  <div className="p-3 space-y-2 flex-shrink-0">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSummarize(false)} disabled={!officeReady || matterRequired}
-                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Summarize Document
-                      </button>
-                      <button
-                        onClick={() => handleSummarize(true)} disabled={!officeReady || matterRequired}
-                        className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Summarize Selection
-                      </button>
-                    </div>
-                    {matterRequired && (
-                      <p className="text-xs text-amber-600 text-center">Select a client and matter above to continue.</p>
-                    )}
-                    {!officeReady && !matterRequired && (
-                      <p className="text-xs text-gray-400 text-center">Connecting to Word...</p>
-                    )}
-                  </div>
-                )}
-
-                {isStreaming && (
-                  <div className="px-3 py-2 flex items-center gap-2 text-gray-400 text-xs flex-shrink-0">
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
-                    <span>Analyzing...</span>
-                  </div>
-                )}
-
-                {error && (
-                  <div className="mx-3 mb-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5 flex-shrink-0">{error}</div>
-                )}
-
-                {/* Result */}
-                {content && (
-                  <div className="flex-1 overflow-y-auto px-3 pb-3">
-                    <div className="prose prose-xs max-w-none text-xs prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700 prose-p:my-1">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{hasCitations ? main : content}</ReactMarkdown>
-                      {isStreaming && <span className="inline-block w-1.5 h-3 bg-gray-400 animate-pulse ml-0.5" />}
-                    </div>
-
-                    {/* Citations */}
-                    {hasCitations && !isStreaming && (
-                      <div className="mt-3 border-t border-gray-200 pt-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Citations</span>
-                        </div>
-                        <div className="space-y-2">
-                          {citations.map(c => (
-                            <div key={c.num} className="bg-white rounded border border-gray-200 px-2 py-1.5">
-                              <div className="flex items-start gap-1.5">
-                                <span className="text-xs font-bold text-gray-400 font-mono flex-shrink-0">[{c.num}]</span>
-                                {c.name && <span className="text-xs font-semibold text-gray-700">{c.name}</span>}
-                              </div>
-                              {c.description && <p className="text-xs text-gray-500 leading-snug pl-5 mt-0.5">{c.description}</p>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Insert button */}
-                    {!isStreaming && (
-                      <div className="mt-3">
-                        <button
-                          onClick={() => insertIntoDocument(hasCitations ? main : content)}
-                          disabled={!officeReady}
-                          className="w-full bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
-                        >
-                          Insert into Doc
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* ── Ask view ── */}
-            {view === "ask" && (
-              <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Prompt input */}
                 <div className="p-3 space-y-2 flex-shrink-0 border-b border-gray-100">
                   {/* Quick-prompt buttons */}
@@ -667,7 +473,7 @@ export default function WordAddinPage() {
                     {[
                       { label: "Rewrite", prompt: "Rewrite this in plain English and suggest improvements to formatting and clarity." },
                       { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision." },
-                      { label: "Draft", prompt: "Draft alternative language that provides stronger protection for our client." },
+                      { label: "Summarize", prompt: "Provide a concise summary of this document, including the key provisions, parties, obligations, and any important dates or deadlines." },
                     ].map(({ label, prompt }) => (
                       <button
                         key={label}
@@ -811,8 +617,7 @@ export default function WordAddinPage() {
                     <p className="text-xs text-gray-400 text-center mt-6 px-4">Type a request above and click a button to get recommendations.</p>
                   )}
                 </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
       </div>
