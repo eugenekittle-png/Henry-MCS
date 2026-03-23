@@ -69,6 +69,50 @@ export default function WordAddinPage() {
     askFollowUpEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [askFollowUpMessages]);
 
+  // Restore persisted client/matter on mount
+  useEffect(() => {
+    try {
+      const client = localStorage.getItem("addin_selectedClient");
+      const matter = localStorage.getItem("addin_selectedMatter");
+      if (client) setSelectedClient(JSON.parse(client));
+      if (matter) setSelectedMatter(JSON.parse(matter));
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (selectedClient) localStorage.setItem("addin_selectedClient", JSON.stringify(selectedClient));
+    else localStorage.removeItem("addin_selectedClient");
+  }, [selectedClient]);
+
+  useEffect(() => {
+    if (selectedMatter) localStorage.setItem("addin_selectedMatter", JSON.stringify(selectedMatter));
+    else localStorage.removeItem("addin_selectedMatter");
+  }, [selectedMatter]);
+
+  // Auto-populate prompt from Word selection
+  useEffect(() => {
+    if (!officeReady) return;
+    const handler = () => {
+      (window as any).Word.run(async (context: any) => {
+        const sel = context.document.getSelection();
+        sel.load("text");
+        await context.sync();
+        const text = (sel.text as string).trim();
+        if (text) setAskPrompt(text);
+      }).catch(() => {});
+    };
+    (window as any).Office.context.document.addHandlerAsync(
+      (window as any).Office.EventType.DocumentSelectionChanged,
+      handler
+    );
+    return () => {
+      (window as any).Office.context.document.removeHandlerAsync(
+        (window as any).Office.EventType.DocumentSelectionChanged,
+        { handler }
+      );
+    };
+  }, [officeReady]);
+
   function handleClientSearchInput(value: string) {
     setClientSearch(value);
     setShowClientResults(true);
