@@ -40,6 +40,7 @@ export default function WordAddinPage() {
 
   // Ask state
   const [askPrompt, setAskPrompt] = useState("");
+  const [activeQuickAction, setActiveQuickAction] = useState<string | null>(null);
   const [askContent, setAskContent] = useState("");
   const [askStreaming, setAskStreaming] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
@@ -98,7 +99,7 @@ export default function WordAddinPage() {
         sel.load("text");
         await context.sync();
         const text = (sel.text as string).trim();
-        if (text) setAskPrompt(text);
+        if (text) { setAskPrompt(text); setActiveQuickAction(null); }
       }).catch(() => {});
     };
     (window as any).Office.context.document.addHandlerAsync(
@@ -215,6 +216,7 @@ export default function WordAddinPage() {
     setAskContent("");
     setAskError(null);
     setAskPrompt("");
+    setActiveQuickAction(null);
     setAskFollowUpMessages([]);
     setAskFollowUpInput("");
   }
@@ -236,8 +238,9 @@ export default function WordAddinPage() {
     });
   }
 
-  const handleAsk = useCallback(async (selectionOnly: boolean) => {
-    if (!officeReady || !askPrompt.trim()) return;
+  const handleAsk = useCallback(async (selectionOnly: boolean, promptOverride?: string) => {
+    const effectivePrompt = promptOverride ?? askPrompt;
+    if (!officeReady || !effectivePrompt.trim()) return;
     setAskContent("");
     setAskError(null);
     setAskStreaming(true);
@@ -263,7 +266,7 @@ export default function WordAddinPage() {
       const res = await fetch("/api/addin/recommend", {
         method: "POST",
         headers,
-        body: JSON.stringify({ text: docText, prompt: askPrompt.trim(), client: clientLabel, matter: matterLabel }),
+        body: JSON.stringify({ text: docText, prompt: effectivePrompt.trim(), client: clientLabel, matter: matterLabel }),
       });
 
       if (!res.ok) {
@@ -515,13 +518,13 @@ export default function WordAddinPage() {
                   {/* Quick-prompt buttons */}
                   <div className="flex gap-1.5">
                     {[
-                      { label: "Rewrite", prompt: "Rewrite this in plain English and suggest improvements to formatting and clarity." },
-                      { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision." },
-                      { label: "Summarize", prompt: "Provide a concise summary of this document, including the key provisions, parties, obligations, and any important dates or deadlines." },
-                    ].map(({ label, prompt }) => (
+                      { label: "Suggest", prompt: "Review the following text and suggest improvements for clarity, grammar, tone, and structure. Provide the original with tracked changes noted, then a clean rewritten version.", autoRun: true },
+                      { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision.", autoRun: false },
+                      { label: "Summarize", prompt: "Provide a concise summary of this document, including the key provisions, parties, obligations, and any important dates or deadlines.", autoRun: false },
+                    ].map(({ label, prompt, autoRun }) => (
                       <button
                         key={label}
-                        onClick={() => setAskPrompt(prompt)}
+                        onClick={() => { setAskPrompt(prompt); setActiveQuickAction(label); if (autoRun) handleAsk(true, prompt); }}
                         disabled={askStreaming}
                         className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
@@ -530,9 +533,9 @@ export default function WordAddinPage() {
                     ))}
                   </div>
                   <textarea
-                    rows={3}
+                    rows={5}
                     value={askPrompt}
-                    onChange={e => setAskPrompt(e.target.value)}
+                    onChange={e => { setAskPrompt(e.target.value); setActiveQuickAction(null); }}
                     placeholder="What would you like to know or do? e.g. &quot;What are the risks in this clause?&quot; or &quot;Suggest improvements to this paragraph.&quot;"
                     disabled={askStreaming}
                     title="Tip: Press Win + H to dictate using Windows Voice Typing"
@@ -544,7 +547,7 @@ export default function WordAddinPage() {
                       disabled={!officeReady || !askPrompt.trim() || askStreaming || matterRequired}
                       className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Ask about Selection
+                      {activeQuickAction === "Suggest" ? "Suggest" : "Ask about Selection"}
                     </button>
                     <button
                       onClick={() => handleAsk(false)}
