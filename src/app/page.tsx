@@ -86,12 +86,6 @@ function LandingPage() {
               icon: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z",
             },
             {
-              color: "blue",
-              title: "Summary",
-              desc: "Upload one or many files and receive a comprehensive AI-generated summary.",
-              icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-            },
-            {
               color: "green",
               title: "Breakdown",
               desc: "Drop in a ZIP archive and get an organised catalog with themes and connections.",
@@ -239,22 +233,6 @@ function Dashboard() {
             Ask questions, analyze documents, and explore any topic with a conversational AI assistant built for law firm workflows.
           </p>
           <p className="text-sm text-gray-400 mt-4">Documents optional — supports PDF, DOCX, XLSX, TXT and more</p>
-        </Link>
-
-        <Link
-          href="/summary"
-          className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-blue-300 transition-all"
-        >
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors">
-            <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Summary</h2>
-          <p className="text-gray-600">
-            Upload one or more documents and get a comprehensive AI-generated summary that captures key information across all files.
-          </p>
-          <p className="text-sm text-gray-400 mt-4">Supports PDF, DOCX, XLSX, PPTX, TXT, MD, CSV</p>
         </Link>
 
         <Link
