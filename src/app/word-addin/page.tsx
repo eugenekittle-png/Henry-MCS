@@ -305,6 +305,22 @@ export default function WordAddinPage() {
     }
   }, [officeReady, askPrompt]);
 
+  const SUGGEST_PROMPT = "Review the following text and suggest improvements for clarity, grammar, tone, and structure. Provide the original with tracked changes noted, then a clean rewritten version.";
+
+  const handleSuggest = useCallback(async () => {
+    if (!officeReady) return;
+    setActiveQuickAction("Suggest");
+    let selectedText = "";
+    try {
+      selectedText = await getDocumentText(true);
+    } catch { /* ignore */ }
+    const combined = selectedText.trim()
+      ? `${SUGGEST_PROMPT}\n\n${selectedText.trim()}`
+      : SUGGEST_PROMPT;
+    setAskPrompt(combined);
+    handleAsk(true, combined);
+  }, [officeReady, handleAsk]);
+
   async function handleAskFollowUp(e: FormEvent) {
     e.preventDefault();
     const question = askFollowUpInput.trim();
@@ -518,13 +534,13 @@ export default function WordAddinPage() {
                   {/* Quick-prompt buttons */}
                   <div className="flex gap-1.5">
                     {[
-                      { label: "Suggest", prompt: "Review the following text and suggest improvements for clarity, grammar, tone, and structure. Provide the original with tracked changes noted, then a clean rewritten version.", autoRun: true },
-                      { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision.", autoRun: false },
-                      { label: "Summarize", prompt: "Provide a concise summary of this document, including the key provisions, parties, obligations, and any important dates or deadlines.", autoRun: false },
-                    ].map(({ label, prompt, autoRun }) => (
+                      { label: "Suggest", onClick: () => handleSuggest() },
+                      { label: "Identify", onClick: () => { setAskPrompt("Identify any ambiguous language, gaps, or legal risks in this provision."); setActiveQuickAction("Identify"); } },
+                      { label: "Summarize", onClick: () => { setAskPrompt("Provide a concise summary of this document, including the key provisions, parties, obligations, and any important dates or deadlines."); setActiveQuickAction("Summarize"); } },
+                    ].map(({ label, onClick }) => (
                       <button
                         key={label}
-                        onClick={() => { setAskPrompt(prompt); setActiveQuickAction(label); if (autoRun) handleAsk(true, prompt); }}
+                        onClick={onClick}
                         disabled={askStreaming}
                         className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
