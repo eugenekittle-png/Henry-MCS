@@ -44,6 +44,7 @@ export default function WordAddinPage() {
   const [askContent, setAskContent] = useState("");
   const [askStreaming, setAskStreaming] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
+  const [askWasSelection, setAskWasSelection] = useState(true);
 
   // Ask follow-up state
   const [askFollowUpMessages, setAskFollowUpMessages] = useState<ChatMessage[]>([]);
@@ -232,6 +233,7 @@ export default function WordAddinPage() {
   const handleAsk = useCallback(async (selectionOnly: boolean, promptOverride?: string) => {
     const effectivePrompt = promptOverride ?? askPrompt;
     if (!officeReady || !effectivePrompt.trim()) return;
+    setAskWasSelection(selectionOnly);
     setAskContent("");
     setAskError(null);
     setAskStreaming(true);
@@ -577,7 +579,7 @@ export default function WordAddinPage() {
                       disabled={!officeReady || !askPrompt.trim() || askStreaming || matterRequired}
                       className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {activeQuickAction === "Suggest" ? "Suggest" : "Ask about Selection"}
+                      Ask about Selection
                     </button>
                     <button
                       onClick={() => handleAsk(false)}
@@ -645,8 +647,8 @@ export default function WordAddinPage() {
                           </button>
                           <button
                             onClick={() => replaceSelection(askHasCitations ? askMain : askContent)}
-                            disabled={!officeReady}
-                            className="w-full bg-blue-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                            disabled={!officeReady || !askWasSelection}
+                            className="w-full bg-blue-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Replace
                           </button>
