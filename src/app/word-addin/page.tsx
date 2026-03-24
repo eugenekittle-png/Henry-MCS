@@ -90,29 +90,6 @@ export default function WordAddinPage() {
     else localStorage.removeItem("addin_selectedMatter");
   }, [selectedMatter]);
 
-  // Auto-populate prompt from Word selection
-  useEffect(() => {
-    if (!officeReady) return;
-    const handler = () => {
-      (window as any).Word.run(async (context: any) => {
-        const sel = context.document.getSelection();
-        sel.load("text");
-        await context.sync();
-        const text = (sel.text as string).trim();
-        if (text) { setAskPrompt(text); setActiveQuickAction(null); }
-      }).catch(() => {});
-    };
-    (window as any).Office.context.document.addHandlerAsync(
-      (window as any).Office.EventType.DocumentSelectionChanged,
-      handler
-    );
-    return () => {
-      (window as any).Office.context.document.removeHandlerAsync(
-        (window as any).Office.EventType.DocumentSelectionChanged,
-        { handler }
-      );
-    };
-  }, [officeReady]);
 
   function handleClientSearchInput(value: string) {
     setClientSearch(value);
