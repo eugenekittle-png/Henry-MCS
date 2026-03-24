@@ -310,15 +310,24 @@ export default function WordAddinPage() {
     handleAsk(true, combined);
   }, [officeReady, handleAsk]);
 
-  async function replaceSelection(text: string) {
-    // Strip tracked-change notation (strikethrough deletions) and markdown for clean plain text
-    const clean = text
+  function extractCleanVersion(text: string): string {
+    // Find the "Clean Rewritten Version" heading and take everything after it
+    const match = text.match(/^#{1,6}\s*.*?\bclean\b.*?(?:version|rewrite|rewritten)\b.*$/im);
+    if (match && match.index !== undefined) {
+      text = text.slice(match.index + match[0].length).trim();
+    }
+    // Strip markdown formatting for plain text insertion
+    return text
       .replace(/~~[^~]*~~/g, "")
       .replace(/\*\*([^*]+)\*\*/g, "$1")
       .replace(/\*([^*]+)\*/g, "$1")
       .replace(/^#{1,6}\s+/gm, "")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+  }
+
+  async function replaceSelection(text: string) {
+    const clean = extractCleanVersion(text);
     await (window as any).Word.run(async (context: any) => {
       const selection = context.document.getSelection();
       selection.insertText(clean, "Replace");
@@ -540,8 +549,8 @@ export default function WordAddinPage() {
                   <div className="flex gap-1.5">
                     {[
                       { label: "Suggest", prompt: "Review the following text and suggest improvements for clarity, grammar, tone, and structure. Provide the original with tracked changes noted, then a clean rewritten version." },
-                      { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision." },
-                      { label: "Summarize", prompt: "Provide a concise summary of this document, including the key provisions, parties, obligations, and any important dates or deadlines." },
+                      { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision. Note each issue inline, then provide a clean rewritten version that resolves all identified issues." },
+                      { label: "Summarize", prompt: "Summarize the following text, highlighting the key provisions, parties, obligations, and important dates. Then provide a clean rewritten version as a concise executive summary." },
                     ].map(({ label, prompt }) => (
                       <button
                         key={label}
