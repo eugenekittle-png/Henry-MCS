@@ -296,21 +296,35 @@ export default function WordAddinPage() {
     }
   }, [officeReady, askPrompt]);
 
-  const SUGGEST_PROMPT = "Review the following text and suggest improvements for clarity, grammar, tone, and structure. Provide the original with tracked changes noted, then a clean rewritten version.";
-
-  const handleSuggest = useCallback(async () => {
+  const handleQuickAction = useCallback(async (label: string, prompt: string) => {
     if (!officeReady) return;
-    setActiveQuickAction("Suggest");
+    setActiveQuickAction(label);
     let selectedText = "";
     try {
       selectedText = await getDocumentText(true);
     } catch { /* ignore */ }
     const combined = selectedText.trim()
-      ? `${SUGGEST_PROMPT}\n\n${selectedText.trim()}`
-      : SUGGEST_PROMPT;
+      ? `${prompt}\n\n${selectedText.trim()}`
+      : prompt;
     setAskPrompt(combined);
     handleAsk(true, combined);
   }, [officeReady, handleAsk]);
+
+  async function replaceSelection(text: string) {
+    // Strip tracked-change notation (strikethrough deletions) and markdown for clean plain text
+    const clean = text
+      .replace(/~~[^~]*~~/g, "")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    await (window as any).Word.run(async (context: any) => {
+      const selection = context.document.getSelection();
+      selection.insertText(clean, "Replace");
+      await context.sync();
+    });
+  }
 
   async function handleAskFollowUp(e: FormEvent) {
     e.preventDefault();
@@ -525,13 +539,13 @@ export default function WordAddinPage() {
                   {/* Quick-prompt buttons */}
                   <div className="flex gap-1.5">
                     {[
-                      { label: "Suggest", onClick: () => handleSuggest() },
-                      { label: "Identify", onClick: () => { setAskPrompt("Identify any ambiguous language, gaps, or legal risks in this provision."); setActiveQuickAction("Identify"); } },
-                      { label: "Summarize", onClick: () => { setAskPrompt("Provide a concise summary of this document, including the key provisions, parties, obligations, and any important dates or deadlines."); setActiveQuickAction("Summarize"); } },
-                    ].map(({ label, onClick }) => (
+                      { label: "Suggest", prompt: "Review the following text and suggest improvements for clarity, grammar, tone, and structure. Provide the original with tracked changes noted, then a clean rewritten version." },
+                      { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision." },
+                      { label: "Summarize", prompt: "Provide a concise summary of this document, including the key provisions, parties, obligations, and any important dates or deadlines." },
+                    ].map(({ label, prompt }) => (
                       <button
                         key={label}
-                        onClick={onClick}
+                        onClick={() => handleQuickAction(label, prompt)}
                         disabled={askStreaming}
                         className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
@@ -612,13 +626,20 @@ export default function WordAddinPage() {
                       )}
 
                       {!askStreaming && (
-                        <div className="mt-3">
+                        <div className="mt-3 space-y-2">
                           <button
                             onClick={() => insertIntoDocument(askHasCitations ? askMain : askContent)}
                             disabled={!officeReady}
                             className="w-full bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
                           >
                             Insert into Doc
+                          </button>
+                          <button
+                            onClick={() => replaceSelection(askHasCitations ? askMain : askContent)}
+                            disabled={!officeReady}
+                            className="w-full bg-blue-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            Replace
                           </button>
                         </div>
                       )}
