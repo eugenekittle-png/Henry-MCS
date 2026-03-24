@@ -90,6 +90,20 @@ export default function WordAddinPage() {
     else localStorage.removeItem("addin_selectedMatter");
   }, [selectedMatter]);
 
+  // When opened from context menu (action=ask), read the selection into the textarea
+  useEffect(() => {
+    if (!officeReady) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("action") !== "ask") return;
+    (window as any).Word.run(async (context: any) => {
+      const sel = context.document.getSelection();
+      sel.load("text");
+      await context.sync();
+      const text = (sel.text as string).trim();
+      if (text) setAskPrompt(text);
+    }).catch(() => {});
+  }, [officeReady]);
+
 
   function handleClientSearchInput(value: string) {
     setClientSearch(value);
