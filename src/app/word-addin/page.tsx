@@ -211,6 +211,10 @@ export default function WordAddinPage() {
     setActiveQuickAction(null);
     setAskFollowUpMessages([]);
     setAskFollowUpInput("");
+    setSelectedClient(null);
+    setSelectedMatter(null);
+    setClientSearch("");
+    setMatterSearch("");
   }
 
   async function getDocumentText(selectionOnly: boolean): Promise<string> {
