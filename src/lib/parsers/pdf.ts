@@ -1,16 +1,7 @@
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-
-// Disable the web worker — not needed in Node.js server environment
-try {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/legacy/build/pdf.worker.mjs",
-    import.meta.url
-  ).href;
-} catch {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
-}
-
 export async function parsePdf(buffer: Buffer): Promise<string> {
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
     useWorkerFetch: false,
