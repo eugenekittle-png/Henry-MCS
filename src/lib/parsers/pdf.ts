@@ -1,10 +1,14 @@
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
-// Point to the bundled worker so pdfjs doesn't complain in Node.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/legacy/build/pdf.worker.mjs",
-  import.meta.url
-).href;
+// Disable the web worker — not needed in Node.js server environment
+try {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/legacy/build/pdf.worker.mjs",
+    import.meta.url
+  ).href;
+} catch {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+}
 
 export async function parsePdf(buffer: Buffer): Promise<string> {
   const loadingTask = pdfjsLib.getDocument({

@@ -67,8 +67,10 @@ export default function ComparePage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Summary request failed");
+        const text = await response.text();
+        let msg = "Summary request failed";
+        try { msg = JSON.parse(text).error || msg; } catch { msg = `Server error (${response.status})`; }
+        throw new Error(msg);
       }
 
       const reader = response.body?.getReader();
@@ -133,8 +135,10 @@ export default function ComparePage() {
       });
 
       if (!diffRes.ok) {
-        const data = await diffRes.json();
-        throw new Error(data.error || "Diff request failed");
+        const text = await diffRes.text();
+        let msg = "Diff request failed";
+        try { msg = JSON.parse(text).error || msg; } catch { msg = `Server error (${diffRes.status})`; }
+        throw new Error(msg);
       }
 
       const diffData = await diffRes.json();
