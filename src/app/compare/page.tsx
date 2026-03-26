@@ -4,7 +4,6 @@ import { useState, useCallback } from "react";
 import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
-import StreamingResponse from "@/components/StreamingResponse";
 import ClientMatterSelect from "@/components/ClientMatterSelect";
 import DiffDisplay from "@/components/DiffDisplay";
 import type { DiffLine } from "@/components/DiffDisplay";
@@ -14,14 +13,11 @@ export default function ComparePage() {
   const [diffLines, setDiffLines] = useSessionState<DiffLine[]>("compare:diffLines", []);
   const [diffFile1Name, setDiffFile1Name] = useSessionState<string>("compare:diffFile1Name", "");
   const [diffFile2Name, setDiffFile2Name] = useSessionState<string>("compare:diffFile2Name", "");
-  const [summaryContent, setSummaryContent] = useSessionState<string>("compare:summaryContent", "");
   const [selectedClient, setSelectedClient] = useSessionState<Client | null>("compare:selectedClient", null);
   const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("compare:selectedMatter", null);
   const [file1, setFile1] = useState<File | null>(null);
   const [file2, setFile2] = useState<File | null>(null);
-  const [includeSummary, setIncludeSummary] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleFile1 = useCallback((files: File[]) => {
@@ -42,9 +38,8 @@ export default function ComparePage() {
     setSelectedMatter(null);
   }, []);
 
-  const isBusy = isComparing || isStreaming;
-  const canSubmit = file1 && file2 && selectedClient && selectedMatter && !isBusy;
-  const hasResults = diffLines.length > 0 || isBusy;
+  const canSubmit = file1 && file2 && selectedClient && selectedMatter && !isComparing;
+  const hasResults = diffLines.length > 0 || isComparing;
 
   const handleReset = useCallback(() => {
     setFile1(null);
@@ -52,72 +47,15 @@ export default function ComparePage() {
     setDiffLines([]);
     setDiffFile1Name("");
     setDiffFile2Name("");
-    setSummaryContent("");
     setError(null);
     setSelectedClient(null);
     setSelectedMatter(null);
-  }, []);
-
-  const streamSummary = useCallback(async (formData: FormData) => {
-    setIsStreaming(true);
-    try {
-      const response = await fetch("/api/compare", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        let msg = "Summary request failed";
-        try { msg = JSON.parse(text).error || msg; } catch { msg = `Server error (${response.status})`; }
-        throw new Error(msg);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response stream");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6);
-          if (data === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.error) {
-              setError(parsed.error);
-              return;
-            }
-            if (parsed.text) {
-              setSummaryContent((prev) => prev + parsed.text);
-            }
-          } catch {
-            // skip malformed JSON
-          }
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setIsStreaming(false);
-    }
   }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!file1 || !file2 || !selectedClient || !selectedMatter) return;
 
     setDiffLines([]);
-    setSummaryContent("");
     setError(null);
     setIsComparing(true);
 
@@ -128,7 +66,6 @@ export default function ComparePage() {
     formData.append("matterId", String(selectedMatter.id));
 
     try {
-      // Step 1: Get line-by-line diff
       const diffRes = await fetch("/api/compare-diff", {
         method: "POST",
         body: formData,
@@ -145,22 +82,12 @@ export default function ComparePage() {
       setDiffLines(diffData.lines);
       setDiffFile1Name(diffData.file1Name);
       setDiffFile2Name(diffData.file2Name);
-      setIsComparing(false);
-
-      // Step 2: If summary requested, stream AI comparison
-      if (includeSummary) {
-        const summaryFormData = new FormData();
-        summaryFormData.append("file1", file1);
-        summaryFormData.append("file2", file2);
-        summaryFormData.append("clientId", String(selectedClient.id));
-        summaryFormData.append("matterId", String(selectedMatter.id));
-        await streamSummary(summaryFormData);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
       setIsComparing(false);
     }
-  }, [file1, file2, selectedClient, selectedMatter, includeSummary, streamSummary]);
+  }, [file1, file2, selectedClient, selectedMatter]);
 
   const handleDownload = useCallback(async () => {
     const res = await fetch("/api/export-compare-pdf", {
@@ -168,7 +95,6 @@ export default function ComparePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         diff: { lines: diffLines, file1Name: diffFile1Name, file2Name: diffFile2Name },
-        markdown: summaryContent || undefined,
         clientMatter: selectedClient && selectedMatter ? {
           clientName: selectedClient.name,
           clientNumber: selectedClient.client_number,
@@ -185,9 +111,9 @@ export default function ComparePage() {
     a.download = "comparison.pdf";
     a.click();
     URL.revokeObjectURL(url);
-  }, [diffLines, diffFile1Name, diffFile2Name, summaryContent, selectedClient, selectedMatter]);
+  }, [diffLines, diffFile1Name, diffFile2Name, selectedClient, selectedMatter]);
 
-  const showDownload = diffLines.length > 0 && !isBusy && !isStreaming;
+  const showDownload = diffLines.length > 0 && !isComparing;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -222,21 +148,6 @@ export default function ComparePage() {
             <span>{selectedMatter.description}</span>
           </div>
         )}
-
-        <label className="flex items-center gap-2 px-1 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={includeSummary}
-            onChange={(e) => setIncludeSummary(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-          />
-          <span className="text-sm font-medium text-gray-700">
-            Summary
-          </span>
-          <span className="text-xs text-gray-400">
-            Append an AI-generated summary analysis to the comparison
-          </span>
-        </label>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -274,18 +185,18 @@ export default function ComparePage() {
           </button>
         )}
 
-        {file1 && file2 && !selectedMatter && !isBusy && (
+        {file1 && file2 && !selectedMatter && !isComparing && (
           <p className="text-sm text-amber-600 text-center">
             Select a client and matter above before submitting.
           </p>
         )}
 
-        {isBusy && (
+        {isComparing && (
           <button
             disabled
             className="w-full bg-gray-400 text-white py-3 px-4 rounded-xl font-medium cursor-not-allowed"
           >
-            {isComparing ? "Comparing..." : "Generating summary..."}
+            Comparing...
           </button>
         )}
 
@@ -302,17 +213,6 @@ export default function ComparePage() {
             file1Name={diffFile1Name}
             file2Name={diffFile2Name}
           />
-        )}
-
-        {(summaryContent || isStreaming) && (
-          <>
-            <h2 className="text-lg font-semibold text-gray-900 pt-2">Summary</h2>
-            <StreamingResponse
-              content={summaryContent}
-              isStreaming={isStreaming}
-              error={null}
-            />
-          </>
         )}
 
         {showDownload && (
