@@ -561,57 +561,75 @@ export default function WordAddinPage() {
 
             {/* ── Ask view ── */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Prompt input */}
-                <div className="p-3 space-y-2 flex-shrink-0 border-b border-gray-100">
-                  {/* Quick-prompt buttons */}
-                  <div className="flex gap-1.5">
-                    {[
-                      { label: "Suggest", prompt: "Review the following text and suggest improvements for clarity, grammar, tone, and structure. Provide the original with tracked changes noted, then a clean rewritten version." },
-                      { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision. Note each issue inline, then provide a clean rewritten version that resolves all identified issues." },
-                      { label: "Summarize", prompt: "Summarize the following text, highlighting the key provisions, parties, obligations, and important dates. Then provide a clean rewritten version as a concise executive summary." },
-                    ].map(({ label, prompt }) => (
+                {/* Prompt input — collapsed when a response is showing */}
+                {(askContent || askStreaming) ? (
+                  <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+                    <p className="flex-1 text-xs text-gray-500 truncate">{askPrompt || "—"}</p>
+                    <button
+                      onClick={() => {
+                        setAskContent("");
+                        setAskError(null);
+                        setActiveQuickAction(null);
+                        setAskFollowUpMessages([]);
+                        setAskFollowUpInput("");
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                    >
+                      New
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-3 space-y-2 flex-shrink-0 border-b border-gray-100">
+                    {/* Quick-prompt buttons */}
+                    <div className="flex gap-1.5">
+                      {[
+                        { label: "Suggest", prompt: "Review the following text and suggest improvements for clarity, grammar, tone, and structure. Provide the original with tracked changes noted, then a clean rewritten version." },
+                        { label: "Identify", prompt: "Identify any ambiguous language, gaps, or legal risks in this provision. Note each issue inline, then provide a clean rewritten version that resolves all identified issues." },
+                        { label: "Summarize", prompt: "Summarize the following text, highlighting the key provisions, parties, obligations, and important dates. Then provide a clean rewritten version as a concise executive summary." },
+                      ].map(({ label, prompt }) => (
+                        <button
+                          key={label}
+                          onClick={() => handleQuickAction(label, prompt)}
+                          disabled={askStreaming}
+                          className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <textarea
+                      rows={5}
+                      value={askPrompt}
+                      onChange={e => { setAskPrompt(e.target.value); setActiveQuickAction(null); }}
+                      placeholder="What would you like to know or do? e.g. &quot;What are the risks in this clause?&quot; or &quot;Suggest improvements to this paragraph.&quot;"
+                      disabled={askStreaming}
+                      title="Tip: Press Win + H to dictate using Windows Voice Typing"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 resize-none"
+                    />
+                    <div className="flex gap-2">
                       <button
-                        key={label}
-                        onClick={() => handleQuickAction(label, prompt)}
-                        disabled={askStreaming}
-                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        onClick={() => handleAsk(false)}
+                        disabled={!officeReady || !askPrompt.trim() || askStreaming || matterRequired}
+                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {label}
+                        Ask
                       </button>
-                    ))}
+                      <button
+                        onClick={() => handleAsk(true)}
+                        disabled={!officeReady || !askPrompt.trim() || askStreaming || matterRequired}
+                        className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Ask about Selection
+                      </button>
+                    </div>
+                    {matterRequired && (
+                      <p className="text-xs text-amber-600 text-center">Select a client and matter above to continue.</p>
+                    )}
+                    {!officeReady && !matterRequired && (
+                      <p className="text-xs text-gray-400 text-center">Connecting to Word...</p>
+                    )}
                   </div>
-                  <textarea
-                    rows={5}
-                    value={askPrompt}
-                    onChange={e => { setAskPrompt(e.target.value); setActiveQuickAction(null); }}
-                    placeholder="What would you like to know or do? e.g. &quot;What are the risks in this clause?&quot; or &quot;Suggest improvements to this paragraph.&quot;"
-                    disabled={askStreaming}
-                    title="Tip: Press Win + H to dictate using Windows Voice Typing"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 resize-none"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleAsk(true)}
-                      disabled={!officeReady || !askPrompt.trim() || askStreaming || matterRequired}
-                      className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Ask about Selection
-                    </button>
-                    <button
-                      onClick={() => handleAsk(false)}
-                      disabled={!officeReady || !askPrompt.trim() || askStreaming || matterRequired}
-                      className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-semibold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Ask about Document
-                    </button>
-                  </div>
-                  {matterRequired && (
-                    <p className="text-xs text-amber-600 text-center">Select a client and matter above to continue.</p>
-                  )}
-                  {!officeReady && !matterRequired && (
-                    <p className="text-xs text-gray-400 text-center">Connecting to Word...</p>
-                  )}
-                </div>
+                )}
 
                 {/* Result area */}
                 <div className="flex-1 overflow-y-auto">
