@@ -33,6 +33,7 @@ const ACTION_LABELS: Record<string, string> = {
   summarize: "Summarize",
   breakdown: "Breakdown",
   compare: "Compare (AI)",
+  "compare-diff": "Compare (Diff)",
   compare_diff: "Compare (Diff)",
   assist: "Assist",
   chat: "Chat",
@@ -44,6 +45,19 @@ const ACTION_LABELS: Record<string, string> = {
   client_delete: "Delete Client",
   matter_update: "Update Matter",
   matter_delete: "Delete Matter",
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  assist: "bg-indigo-100 text-indigo-700",
+  chat: "bg-indigo-100 text-indigo-700",
+  breakdown: "bg-green-100 text-green-700",
+  compare: "bg-purple-100 text-purple-700",
+  "compare-diff": "bg-purple-100 text-purple-700",
+  compare_diff: "bg-purple-100 text-purple-700",
+  summarize: "bg-amber-100 text-amber-700",
+  login: "bg-gray-100 text-gray-600",
+  logout: "bg-gray-100 text-gray-600",
+  change_password: "bg-gray-100 text-gray-600",
 };
 
 const TABS: { id: GroupBy; label: string }[] = [
@@ -74,6 +88,30 @@ function fmtDateTime(iso: string) {
     year: "numeric", month: "short", day: "numeric",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
+}
+
+function ActionBadge({ action }: { action: string }) {
+  const label = ACTION_LABELS[action] ?? action;
+  const color = ACTION_COLORS[action] ?? "bg-gray-100 text-gray-600";
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${color}`}>
+      {label}
+    </span>
+  );
+}
+
+function UserAvatar({ username }: { username: string }) {
+  const initials = username
+    .split(/[\s._-]/)
+    .map(p => p[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+  return (
+    <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-semibold shrink-0">
+      {initials || username[0]?.toUpperCase() || "U"}
+    </div>
+  );
 }
 
 export default function MyUsagePage() {
@@ -151,37 +189,75 @@ export default function MyUsagePage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Usage</h1>
-          {username && <p className="text-gray-500 text-sm mt-1">{username}</p>}
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          {username && <UserAvatar username={username} />}
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Usage</h1>
+            {username && <p className="text-gray-500 text-sm">{username}</p>}
+          </div>
         </div>
         <button
           onClick={handleRefresh}
-          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
         >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
           Refresh
         </button>
       </div>
 
-      {/* Summary cards — only for aggregated views */}
+      {/* Summary cards */}
       {groupBy !== "log" && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <p className="text-xs text-gray-500 mb-1">Total Requests</p>
-            <p className="text-2xl font-bold text-gray-900">{fmt(totals.total_requests)}</p>
+          <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+              <svg className="w-4.5 h-4.5 w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Total Requests</p>
+              <p className="text-2xl font-bold text-gray-900">{fmt(totals.total_requests)}</p>
+            </div>
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <p className="text-xs text-gray-500 mb-1">Input Tokens</p>
-            <p className="text-2xl font-bold text-blue-600">{fmt(totals.total_input)}</p>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Input Tokens</p>
+              <p className="text-2xl font-bold text-blue-600">{fmt(totals.total_input)}</p>
+            </div>
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <p className="text-xs text-gray-500 mb-1">Output Tokens</p>
-            <p className="text-2xl font-bold text-green-600">{fmt(totals.total_output)}</p>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8v8m0 0l4-4m-4 4l-4-4" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Output Tokens</p>
+              <p className="text-2xl font-bold text-green-600">{fmt(totals.total_output)}</p>
+            </div>
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <p className="text-xs text-gray-500 mb-1">Estimated Cost</p>
-            <p className="text-2xl font-bold text-gray-900">{fmtCost(totalCost)}</p>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-start gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Estimated Cost</p>
+              <p className="text-2xl font-bold text-gray-900">{fmtCost(totalCost)}</p>
+            </div>
           </div>
         </div>
       )}
@@ -206,7 +282,6 @@ export default function MyUsagePage() {
       {/* Request Log view */}
       {groupBy === "log" ? (
         <div className="space-y-4">
-          {/* Date range filter */}
           <form onSubmit={handleLogFilter} className="flex flex-wrap items-end gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">From</label>
@@ -228,7 +303,7 @@ export default function MyUsagePage() {
             </div>
             <button
               type="submit"
-              className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
             >
               Filter
             </button>
@@ -244,7 +319,6 @@ export default function MyUsagePage() {
             <span className="ml-auto text-xs text-gray-400">{fmt(logTotal)} record{logTotal !== 1 ? "s" : ""}</span>
           </form>
 
-          {/* Log table */}
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             {loading ? (
               <div className="px-4 py-10 text-center text-gray-500 text-sm">Loading...</div>
@@ -253,26 +327,24 @@ export default function MyUsagePage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-left px-4 py-3 font-medium text-gray-700 whitespace-nowrap">Date & Time</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-700">Action</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-700">Client</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-700">Matter</th>
-                      <th className="text-right px-4 py-3 font-medium text-gray-700">In Tokens</th>
-                      <th className="text-right px-4 py-3 font-medium text-gray-700">Out Tokens</th>
-                      <th className="text-right px-4 py-3 font-medium text-gray-700">Cost</th>
-                      <th className="text-center px-4 py-3 font-medium text-gray-700">Status</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Date & Time</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Action</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Client</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Matter</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600">In Tokens</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600">Out Tokens</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600">Cost</th>
+                      <th className="text-center px-4 py-3 font-medium text-gray-600">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {logRows.map(r => {
                       const cost = ((r.tokens_input ?? 0) / 1_000_000) * INPUT_COST_PER_M + ((r.tokens_output ?? 0) / 1_000_000) * OUTPUT_COST_PER_M;
                       return (
-                        <tr key={r.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                          <td className="px-4 py-2.5 font-mono text-xs text-gray-600 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
-                          <td className="px-4 py-2.5 text-xs">
-                            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono">
-                              {ACTION_LABELS[r.action] ?? r.action}
-                            </span>
+                        <tr key={r.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
+                          <td className="px-4 py-2.5 font-mono text-xs text-gray-500 whitespace-nowrap">{fmtDateTime(r.created_at)}</td>
+                          <td className="px-4 py-2.5">
+                            <ActionBadge action={r.action} />
                           </td>
                           <td className="px-4 py-2.5 text-xs text-gray-600">{r.client_number ?? <span className="text-gray-300">—</span>}</td>
                           <td className="px-4 py-2.5 text-xs text-gray-600">{r.matter_number ?? <span className="text-gray-300">—</span>}</td>
@@ -287,9 +359,15 @@ export default function MyUsagePage() {
                           </td>
                           <td className="px-4 py-2.5 text-center">
                             {r.success ? (
-                              <span className="text-xs text-green-600 font-medium">OK</span>
+                              <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                                OK
+                              </span>
                             ) : (
-                              <span className="text-xs text-red-500 font-medium">Failed</span>
+                              <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                                Failed
+                              </span>
                             )}
                           </td>
                         </tr>
@@ -297,7 +375,7 @@ export default function MyUsagePage() {
                     })}
                     {logRows.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No requests found</td>
+                        <td colSpan={8} className="px-4 py-10 text-center text-gray-400">No requests found</td>
                       </tr>
                     )}
                   </tbody>
@@ -306,7 +384,6 @@ export default function MyUsagePage() {
             )}
           </div>
 
-          {/* Pagination */}
           {logPageCount > 1 && (
             <div className="flex items-center justify-between text-sm text-gray-600">
               <span>Page {logPage + 1} of {logPageCount}</span>
@@ -338,25 +415,31 @@ export default function MyUsagePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 font-medium text-gray-700">{COL_HEADERS[groupBy as Exclude<GroupBy, "log">]}</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-700">Requests</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-700">Input Tokens</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-700">Output Tokens</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-700">Est. Cost</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">{COL_HEADERS[groupBy as Exclude<GroupBy, "log">]}</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Requests</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Input Tokens</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Output Tokens</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Est. Cost</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map(r => {
                   const cost = (r.total_input / 1_000_000) * INPUT_COST_PER_M + (r.total_output / 1_000_000) * OUTPUT_COST_PER_M;
                   return (
-                    <tr key={r.label} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-900">{displayLabel(r)}</td>
+                    <tr key={r.label} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/70">
+                      <td className="px-4 py-3">
+                        {groupBy === "action" ? (
+                          <ActionBadge action={r.label} />
+                        ) : (
+                          <span className="text-gray-900">{displayLabel(r)}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right text-gray-700">{fmt(r.total_requests)}</td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-blue-600">
-                        {r.total_input > 0 ? fmt(r.total_input) : <span className="text-gray-400">—</span>}
+                        {r.total_input > 0 ? fmt(r.total_input) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-xs text-green-600">
-                        {r.total_output > 0 ? fmt(r.total_output) : <span className="text-gray-400">—</span>}
+                        {r.total_output > 0 ? fmt(r.total_output) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">
                         {cost > 0 ? fmtCost(cost) : <span className="text-gray-400 font-normal">—</span>}
@@ -365,7 +448,7 @@ export default function MyUsagePage() {
                   );
                 })}
                 {rows.length > 1 && (
-                  <tr className="bg-gray-50 border-t-2 border-gray-300 font-semibold">
+                  <tr className="bg-gray-50 border-t-2 border-gray-200 font-semibold">
                     <td className="px-4 py-3 text-gray-700 text-sm">Total</td>
                     <td className="px-4 py-3 text-right text-gray-700">{fmt(totals.total_requests)}</td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-blue-600">{fmt(totals.total_input)}</td>
@@ -375,7 +458,7 @@ export default function MyUsagePage() {
                 )}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No usage data yet</td>
+                    <td colSpan={5} className="px-4 py-10 text-center text-gray-400">No usage data yet</td>
                   </tr>
                 )}
               </tbody>
