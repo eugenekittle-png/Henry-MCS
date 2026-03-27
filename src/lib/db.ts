@@ -604,8 +604,12 @@ export interface UsageRow {
   total_output: number;
 }
 
-export async function getUsageForUser(username: string) {
+export async function getUsageForUser(username: string, from?: string, to?: string) {
   await ensureInit();
+  const conditions = ["LOWER(username) = LOWER(?)"];
+  const args: unknown[] = [username];
+  if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
+  if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   const result = await db.execute({
     sql: `
       SELECT
@@ -615,17 +619,21 @@ export async function getUsageForUser(username: string) {
         COALESCE(SUM(tokens_input), 0) as total_input,
         COALESCE(SUM(tokens_output), 0) as total_output
       FROM audit_logs
-      WHERE LOWER(username) = LOWER(?)
+      WHERE ${conditions.join(" AND ")}
       GROUP BY action
       ORDER BY total_input + total_output DESC
     `,
-    args: [username],
+    args,
   });
   return result.rows as unknown as UsageRow[];
 }
 
-export async function getUsageForUserByClient(username: string) {
+export async function getUsageForUserByClient(username: string, from?: string, to?: string) {
   await ensureInit();
+  const conditions = ["LOWER(username) = LOWER(?)"];
+  const args: unknown[] = [username];
+  if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
+  if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   const result = await db.execute({
     sql: `
       SELECT
@@ -635,17 +643,21 @@ export async function getUsageForUserByClient(username: string) {
         COALESCE(SUM(tokens_input), 0) as total_input,
         COALESCE(SUM(tokens_output), 0) as total_output
       FROM audit_logs
-      WHERE LOWER(username) = LOWER(?)
+      WHERE ${conditions.join(" AND ")}
       GROUP BY COALESCE(client_number, '(none)')
       ORDER BY total_input + total_output DESC
     `,
-    args: [username],
+    args,
   });
   return result.rows as unknown as UsageRow[];
 }
 
-export async function getUsageForUserByMatter(username: string) {
+export async function getUsageForUserByMatter(username: string, from?: string, to?: string) {
   await ensureInit();
+  const conditions = ["LOWER(username) = LOWER(?)"];
+  const args: unknown[] = [username];
+  if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
+  if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   const result = await db.execute({
     sql: `
       SELECT
@@ -655,11 +667,11 @@ export async function getUsageForUserByMatter(username: string) {
         COALESCE(SUM(tokens_input), 0) as total_input,
         COALESCE(SUM(tokens_output), 0) as total_output
       FROM audit_logs
-      WHERE LOWER(username) = LOWER(?)
+      WHERE ${conditions.join(" AND ")}
       GROUP BY COALESCE(client_number, '(none)'), COALESCE(matter_number, '(none)')
       ORDER BY total_input + total_output DESC
     `,
-    args: [username],
+    args,
   });
   return result.rows as unknown as UsageRow[];
 }

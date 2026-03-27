@@ -24,13 +24,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ username: session.username, rows, total, page, limit });
   }
 
+  const from = searchParams.get("from") ?? undefined;
+  const to = searchParams.get("to") ?? undefined;
+
   let rows;
   if (groupBy === "client") {
-    rows = await getUsageForUserByClient(session.username);
+    rows = await getUsageForUserByClient(session.username, from, to);
   } else if (groupBy === "matter") {
-    rows = await getUsageForUserByMatter(session.username);
+    rows = await getUsageForUserByMatter(session.username, from, to);
   } else {
-    rows = await getUsageForUser(session.username);
+    rows = await getUsageForUser(session.username, from, to);
   }
 
   return NextResponse.json({ username: session.username, rows });
