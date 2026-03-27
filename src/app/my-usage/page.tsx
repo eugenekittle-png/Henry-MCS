@@ -40,6 +40,7 @@ const ACTION_LABELS: Record<string, string> = {
   compare_diff: "Compare (Diff)",
   assist: "Assist",
   chat: "Chat",
+  Ask: "Ask (Word)",
   user_create: "Create User",
   user_update: "Update User",
   user_delete: "Delete User",
@@ -53,6 +54,7 @@ const ACTION_LABELS: Record<string, string> = {
 const ACTION_COLORS: Record<string, string> = {
   assist: "bg-indigo-100 text-indigo-700",
   chat: "bg-indigo-100 text-indigo-700",
+  Ask: "bg-indigo-100 text-indigo-700",
   breakdown: "bg-green-100 text-green-700",
   compare: "bg-purple-100 text-purple-700",
   "compare-diff": "bg-purple-100 text-purple-700",

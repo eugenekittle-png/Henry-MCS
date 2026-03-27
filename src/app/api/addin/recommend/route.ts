@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { text, prompt, client, matter } = await req.json();
+    const { text, prompt, client, matter, clientNumber, matterNumber } = await req.json();
 
     if (!text?.trim()) {
       return Response.json({ error: "Document text is required" }, { status: 400 });
@@ -54,6 +54,8 @@ export async function POST(req: NextRequest) {
           logAction({
             username: session.username,
             action: "Ask",
+            clientNumber: clientNumber || null,
+            matterNumber: matterNumber || null,
             details: { source: "word-addin", prompt: prompt.slice(0, 200), client: client || undefined, matter: matter || undefined },
             tokensInput,
             tokensOutput,

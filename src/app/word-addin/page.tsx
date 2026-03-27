@@ -263,7 +263,14 @@ export default function WordAddinPage() {
       const res = await fetch("/api/addin/recommend", {
         method: "POST",
         headers,
-        body: JSON.stringify({ text: docText, prompt: effectivePrompt.trim(), client: clientLabel, matter: matterLabel }),
+        body: JSON.stringify({
+          text: docText,
+          prompt: effectivePrompt.trim(),
+          client: clientLabel,
+          matter: matterLabel,
+          clientNumber: selectedClient?.client_number ?? null,
+          matterNumber: selectedMatter?.matter_number ?? null,
+        }),
       });
 
       if (!res.ok) {

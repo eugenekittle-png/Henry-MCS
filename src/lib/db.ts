@@ -502,15 +502,20 @@ export async function getAuditLogsFiltered(params: {
   username?: string;
   limit?: number;
   offset?: number;
+  billableOnly?: boolean;
 }) {
   await ensureInit();
-  const { from, to, username, limit = 200, offset = 0 } = params;
+  const { from, to, username, limit = 200, offset = 0, billableOnly = false } = params;
   const conditions: string[] = [];
   const args: (string | number)[] = [];
 
   if (username) { conditions.push("LOWER(username) = LOWER(?)"); args.push(username); }
   if (from) { conditions.push("created_at >= ?"); args.push(from); }
   if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
+  if (billableOnly) {
+    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...BILLABLE_ACTIONS);
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   args.push(limit, offset);
@@ -533,15 +538,19 @@ export async function getAuditLogsFiltered(params: {
   }[];
 }
 
-export async function getAuditLogsFilteredCount(params: { from?: string; to?: string; username?: string }) {
+export async function getAuditLogsFilteredCount(params: { from?: string; to?: string; username?: string; billableOnly?: boolean }) {
   await ensureInit();
-  const { from, to, username } = params;
+  const { from, to, username, billableOnly = false } = params;
   const conditions: string[] = [];
   const args: string[] = [];
 
   if (username) { conditions.push("LOWER(username) = LOWER(?)"); args.push(username); }
   if (from) { conditions.push("created_at >= ?"); args.push(from); }
   if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
+  if (billableOnly) {
+    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...BILLABLE_ACTIONS);
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const result = await db.execute({ sql: `SELECT COUNT(*) as count FROM audit_logs ${where}`, args });
@@ -604,12 +613,18 @@ export interface UsageRow {
   total_output: number;
 }
 
-export async function getUsageForUser(username: string, from?: string, to?: string) {
+const BILLABLE_ACTIONS = ["assist", "chat", "breakdown", "compare", "compare-diff", "compare_diff", "summarize", "Ask"];
+
+export async function getUsageForUser(username: string, from?: string, to?: string, billableOnly = false) {
   await ensureInit();
-  const conditions = ["LOWER(username) = LOWER(?)"];
+  const conditions = ["LOWER(username) = LOWER(?)", "success = 1"];
   const args: (string | number | null)[] = [username];
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
+  if (billableOnly) {
+    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...BILLABLE_ACTIONS);
+  }
   const result = await db.execute({
     sql: `
       SELECT
@@ -628,12 +643,16 @@ export async function getUsageForUser(username: string, from?: string, to?: stri
   return result.rows as unknown as UsageRow[];
 }
 
-export async function getUsageForUserByClient(username: string, from?: string, to?: string) {
+export async function getUsageForUserByClient(username: string, from?: string, to?: string, billableOnly = false) {
   await ensureInit();
-  const conditions = ["LOWER(username) = LOWER(?)"];
+  const conditions = ["LOWER(username) = LOWER(?)", "success = 1"];
   const args: (string | number | null)[] = [username];
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
+  if (billableOnly) {
+    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...BILLABLE_ACTIONS);
+  }
   const result = await db.execute({
     sql: `
       SELECT
@@ -652,12 +671,16 @@ export async function getUsageForUserByClient(username: string, from?: string, t
   return result.rows as unknown as UsageRow[];
 }
 
-export async function getUsageForUserByMatter(username: string, from?: string, to?: string) {
+export async function getUsageForUserByMatter(username: string, from?: string, to?: string, billableOnly = false) {
   await ensureInit();
-  const conditions = ["LOWER(username) = LOWER(?)"];
+  const conditions = ["LOWER(username) = LOWER(?)", "success = 1"];
   const args: (string | number | null)[] = [username];
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
+  if (billableOnly) {
+    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...BILLABLE_ACTIONS);
+  }
   const result = await db.execute({
     sql: `
       SELECT
