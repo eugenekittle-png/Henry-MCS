@@ -607,7 +607,7 @@ export interface UsageRow {
 export async function getUsageForUser(username: string, from?: string, to?: string) {
   await ensureInit();
   const conditions = ["LOWER(username) = LOWER(?)"];
-  const args: unknown[] = [username];
+  const args: (string | number | null)[] = [username];
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   const result = await db.execute({
@@ -631,7 +631,7 @@ export async function getUsageForUser(username: string, from?: string, to?: stri
 export async function getUsageForUserByClient(username: string, from?: string, to?: string) {
   await ensureInit();
   const conditions = ["LOWER(username) = LOWER(?)"];
-  const args: unknown[] = [username];
+  const args: (string | number | null)[] = [username];
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   const result = await db.execute({
@@ -655,7 +655,7 @@ export async function getUsageForUserByClient(username: string, from?: string, t
 export async function getUsageForUserByMatter(username: string, from?: string, to?: string) {
   await ensureInit();
   const conditions = ["LOWER(username) = LOWER(?)"];
-  const args: unknown[] = [username];
+  const args: (string | number | null)[] = [username];
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   const result = await db.execute({

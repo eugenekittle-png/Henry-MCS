@@ -225,9 +225,10 @@ function UsagePieChart({ rows, groupBy }: { rows: UsageRow[]; groupBy: Exclude<G
             ))}
           </Pie>
           <Tooltip
-            formatter={(value: number) =>
-              hasCost ? fmtCost(value) : fmt(value)
-            }
+            formatter={(value) => {
+              const n = Number(value);
+              return hasCost ? fmtCost(n) : fmt(n);
+            }}
           />
           <Legend
             iconType="circle"
