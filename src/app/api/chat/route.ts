@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
 
   try {
-    const { messages } = await req.json();
+    const { messages, source, clientNumber, matterNumber } = await req.json();
+    const isWordAddin = source === "word-addin";
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return Response.json({ error: "Messages are required" }, { status: 400 });
@@ -69,8 +70,11 @@ export async function POST(req: NextRequest) {
         } finally {
           logAction({
             username: session?.username ?? null,
-            action: "Chat",
+            action: isWordAddin ? "Ask" : "Chat",
+            clientNumber: isWordAddin ? (clientNumber || null) : null,
+            matterNumber: isWordAddin ? (matterNumber || null) : null,
             details: {
+              source: source || undefined,
               question: suspiciousFlags.length > 0 ? question : question.slice(0, 200),
               ...(suspiciousFlags.length > 0 ? { suspicious: true, suspiciousFlags } : {}),
             },

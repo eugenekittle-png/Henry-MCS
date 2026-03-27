@@ -371,7 +371,12 @@ export default function WordAddinPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers,
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          source: "word-addin",
+          clientNumber: selectedClient?.client_number ?? null,
+          matterNumber: selectedMatter?.matter_number ?? null,
+        }),
       });
       if (!res.ok) { let m = `Failed (${res.status})`; try { const d = await res.json(); if (d.error) m = d.error; } catch { /* non-JSON */ } throw new Error(m); }
 
@@ -692,7 +697,7 @@ export default function WordAddinPage() {
                           </div>
                           <form onSubmit={handleAskFollowUp} className="flex items-end border border-gray-200 rounded-lg bg-white overflow-hidden">
                             <textarea
-                              rows={2}
+                              rows={3}
                               value={askFollowUpInput}
                               onChange={e => setAskFollowUpInput(e.target.value)}
                               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAskFollowUp(e as unknown as FormEvent); } }}
