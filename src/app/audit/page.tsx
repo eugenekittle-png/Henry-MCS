@@ -13,6 +13,7 @@ interface AuditLog {
   tokens_input: number | null;
   tokens_output: number | null;
   success: number;
+  ip_address: string | null;
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -90,7 +91,7 @@ export default function AuditPage() {
   const uniqueActions = Array.from(new Set(logs.map((l) => l.action))).sort();
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr + "Z").toLocaleString();
+    return new Date(dateStr + "Z").toLocaleString(undefined, { timeZoneName: "short" });
   }
 
   function parseDetails(raw: string | null) {
@@ -163,6 +164,7 @@ export default function AuditPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-700 w-36">Action</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-700 w-28">Client</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-700 w-28">Matter</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-700 w-32">IP Address</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-700">Details</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-700 w-32">Tokens In / Out</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-700 w-20">Status</th>
@@ -194,6 +196,9 @@ export default function AuditPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-700 text-xs font-mono">
                       {log.matter_number ?? <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 text-xs font-mono">
+                      {log.ip_address ?? <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
                       {details ? (
@@ -231,7 +236,7 @@ export default function AuditPage() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No logs found</td>
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">No logs found</td>
                 </tr>
               )}
             </tbody>

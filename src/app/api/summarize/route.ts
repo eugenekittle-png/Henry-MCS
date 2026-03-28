@@ -4,12 +4,13 @@ import { createStream } from "@/lib/anthropic";
 import { SUMMARY_SYSTEM_PROMPT, MAX_FILE_SIZE, SUPPORTED_EXTENSIONS } from "@/lib/constants";
 import { getClient, getMatter } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { logAction } from "@/lib/audit";
+import { logAction, getClientIp } from "@/lib/audit";
 
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
+  const ip = getClientIp(req);
 
   try {
     const formData = await req.formData();
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`));
           controller.close();
         } finally {
-          logAction({ username: session?.username ?? null, action: "Summarize", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success });
+          logAction({ username: session?.username ?? null, action: "Summarize", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success, ipAddress: ip });
         }
       },
     });
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session?.username ?? null, action: "Summarize", details: { error: message }, success: false });
+    logAction({ username: session?.username ?? null, action: "Summarize", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status: 500 });
   }
 }

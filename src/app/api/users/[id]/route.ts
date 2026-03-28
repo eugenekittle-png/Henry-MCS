@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, hashPassword } from "@/lib/auth";
-import { getUser, updateUserRole, updateUserPassword, deleteUser } from "@/lib/db";
+import { getUser, updateUserRole, updateUserPassword, deleteUser, resetFailedLogins } from "@/lib/db";
 import { validatePassword } from "@/lib/password";
-import { logAction } from "@/lib/audit";
+import { logAction, getClientIp } from "@/lib/audit";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
@@ -10,6 +10,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
+  const ip = getClientIp(request);
   const { id } = await params;
   const userId = Number(id);
   const user = await getUser(userId);
@@ -17,8 +18,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const { role, password } = await request.json();
+  const { role, password, unlock } = await request.json();
   const changes: Record<string, unknown> = { targetUser: user.username };
+
+  if (unlock) {
+    await resetFailedLogins(user.username);
+    changes.unlocked = true;
+  }
 
   if (role && role !== user.role) {
     if (role !== "admin" && role !== "user") {
@@ -38,7 +44,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     changes.passwordReset = true;
   }
 
-  await logAction({ username: session.username, action: "User-Update", details: changes, success: true });
+  await logAction({ username: session.username, action: "User-Update", details: changes, success: true, ipAddress: ip });
   const updated = await getUser(userId);
   return NextResponse.json(updated);
 }
@@ -49,6 +55,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
+  const ip = getClientIp(request);
   const { id } = await params;
   const userId = Number(id);
 
@@ -62,6 +69,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   }
 
   await deleteUser(userId);
-  await logAction({ username: session.username, action: "User-Delete", details: { targetUser: user.username }, success: true });
+  await logAction({ username: session.username, action: "User-Delete", details: { targetUser: user.username }, success: true, ipAddress: ip });
   return NextResponse.json({ ok: true });
 }

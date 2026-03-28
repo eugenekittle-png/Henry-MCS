@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createChatStream } from "@/lib/anthropic";
 import { getSessionFromRequest } from "@/lib/auth";
 import { detectSuspicious } from "@/lib/security";
-import { logAction } from "@/lib/audit";
+import { logAction, getClientIp } from "@/lib/audit";
 
 export const maxDuration = 300;
 
@@ -27,6 +27,7 @@ Only include the citations section when you actually have citations to list.`;
 
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
+  const ip = getClientIp(req);
 
   try {
     const { messages, source, clientNumber, matterNumber } = await req.json();
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
             tokensInput,
             tokensOutput,
             success,
+            ipAddress: ip,
           });
         }
       },
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session?.username ?? null, action: "Chat", details: { error: message }, success: false });
+    logAction({ username: session?.username ?? null, action: "Chat", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status: 500 });
   }
 }

@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const billableOnly = session.role !== "admin";
   const { searchParams } = request.nextUrl;
   const groupBy = searchParams.get("groupBy") ?? "action";
 
@@ -18,8 +19,8 @@ export async function GET(request: NextRequest) {
     const limit = 100;
     const offset = page * limit;
     const [rows, total] = await Promise.all([
-      getAuditLogsFiltered({ username: session.username, from, to, limit, offset }),
-      getAuditLogsFilteredCount({ username: session.username, from, to }),
+      getAuditLogsFiltered({ username: session.username, from, to, limit, offset, billableOnly }),
+      getAuditLogsFilteredCount({ username: session.username, from, to, billableOnly }),
     ]);
     return NextResponse.json({ username: session.username, rows, total, page, limit });
   }
@@ -29,11 +30,11 @@ export async function GET(request: NextRequest) {
 
   let rows;
   if (groupBy === "client") {
-    rows = await getUsageForUserByClient(session.username, from, to);
+    rows = await getUsageForUserByClient(session.username, from, to, billableOnly);
   } else if (groupBy === "matter") {
-    rows = await getUsageForUserByMatter(session.username, from, to);
+    rows = await getUsageForUserByMatter(session.username, from, to, billableOnly);
   } else {
-    rows = await getUsageForUser(session.username, from, to);
+    rows = await getUsageForUser(session.username, from, to, billableOnly);
   }
 
   return NextResponse.json({ username: session.username, rows });

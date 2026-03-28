@@ -82,10 +82,22 @@ async function ensureInit() {
     )
   `);
 
-  // Migrate: add client_number / matter_number columns to existing audit_logs tables
-  for (const col of ["client_number", "matter_number"]) {
+  // Migrate: add client_number / matter_number / ip_address columns to existing audit_logs tables
+  for (const col of ["client_number", "matter_number", "ip_address"]) {
     try {
       await db.execute(`ALTER TABLE audit_logs ADD COLUMN ${col} TEXT`);
+    } catch {
+      // column already exists
+    }
+  }
+
+  // Migrate: add login lockout columns to users table
+  for (const stmt of [
+    "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN locked_until TEXT",
+  ]) {
+    try {
+      await db.execute(stmt);
     } catch {
       // column already exists
     }
@@ -391,18 +403,38 @@ export async function deleteMatter(id: number) {
 export async function getUserByUsername(username: string) {
   await ensureInit();
   const result = await db.execute({
-    sql: "SELECT id, username, password_hash, role, must_change_password FROM users WHERE LOWER(username) = LOWER(?)",
+    sql: "SELECT id, username, password_hash, role, must_change_password, failed_login_attempts, locked_until FROM users WHERE LOWER(username) = LOWER(?)",
     args: [username],
   });
   if (!result.rows[0]) return undefined;
-  const row = result.rows[0] as unknown as { id: number; username: string; password_hash: string; role: "admin" | "user"; must_change_password: number };
-  return { ...row, must_change_password: !!row.must_change_password };
+  const row = result.rows[0] as unknown as { id: number; username: string; password_hash: string; role: "admin" | "user"; must_change_password: number; failed_login_attempts: number; locked_until: string | null };
+  return { ...row, must_change_password: !!row.must_change_password, failed_login_attempts: row.failed_login_attempts ?? 0 };
+}
+
+export async function incrementFailedLogins(username: string) {
+  await ensureInit();
+  // Increment count, and lock the account for 15 minutes once it reaches 5
+  await db.execute({
+    sql: `UPDATE users SET
+            failed_login_attempts = failed_login_attempts + 1,
+            locked_until = CASE WHEN failed_login_attempts + 1 >= 5 THEN datetime('now', '+15 minutes') ELSE locked_until END
+          WHERE LOWER(username) = LOWER(?)`,
+    args: [username],
+  });
+}
+
+export async function resetFailedLogins(username: string) {
+  await ensureInit();
+  await db.execute({
+    sql: "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE LOWER(username) = LOWER(?)",
+    args: [username],
+  });
 }
 
 export async function getAllUsers() {
   await ensureInit();
-  const result = await db.execute("SELECT id, username, role, created_at FROM users ORDER BY username");
-  return result.rows as unknown as { id: number; username: string; role: "admin" | "user"; created_at: string }[];
+  const result = await db.execute("SELECT id, username, role, created_at, failed_login_attempts, locked_until FROM users ORDER BY username");
+  return result.rows as unknown as { id: number; username: string; role: "admin" | "user"; created_at: string; failed_login_attempts: number; locked_until: string | null }[];
 }
 
 export async function getUser(id: number) {
@@ -451,11 +483,12 @@ export async function insertAuditLog(params: {
   tokensInput?: number;
   tokensOutput?: number;
   success: boolean;
+  ipAddress?: string | null;
 }) {
   await ensureInit();
   await db.execute({
-    sql: `INSERT INTO audit_logs (username, action, client_number, matter_number, details, tokens_input, tokens_output, success)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO audit_logs (username, action, client_number, matter_number, details, tokens_input, tokens_output, success, ip_address)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       params.username ?? null,
       params.action,
@@ -465,6 +498,7 @@ export async function insertAuditLog(params: {
       params.tokensInput ?? null,
       params.tokensOutput ?? null,
       params.success ? 1 : 0,
+      params.ipAddress ?? null,
     ],
   });
 }
@@ -472,7 +506,7 @@ export async function insertAuditLog(params: {
 export async function getAuditLogs(limit = 200, offset = 0) {
   await ensureInit();
   const result = await db.execute({
-    sql: `SELECT id, created_at, username, action, client_number, matter_number, details, tokens_input, tokens_output, success
+    sql: `SELECT id, created_at, username, action, client_number, matter_number, details, tokens_input, tokens_output, success, ip_address
           FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?`,
     args: [limit, offset],
   });
@@ -487,6 +521,7 @@ export async function getAuditLogs(limit = 200, offset = 0) {
     tokens_input: number | null;
     tokens_output: number | null;
     success: number;
+    ip_address: string | null;
   }[];
 }
 

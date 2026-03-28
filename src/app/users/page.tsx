@@ -7,6 +7,8 @@ interface User {
   username: string;
   role: "admin" | "user";
   created_at: string;
+  failed_login_attempts: number;
+  locked_until: string | null;
 }
 
 export default function UsersPage() {
@@ -93,6 +95,26 @@ export default function UsersPage() {
       return;
     }
     fetchUsers();
+  };
+
+  const handleUnlock = async (user: User) => {
+    setError(null);
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: user.role, unlock: true }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error || "Failed to unlock account");
+      return;
+    }
+    fetchUsers();
+  };
+
+  const isLocked = (user: User) => {
+    if (!user.locked_until) return false;
+    return new Date(user.locked_until + "Z") > new Date();
   };
 
   const handleCancel = () => {
@@ -232,7 +254,16 @@ export default function UsersPage() {
                   </>
                 ) : (
                   <>
-                    <td className="px-4 py-3 text-gray-900 font-mono">{user.username}</td>
+                    <td className="px-4 py-3 font-mono">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-900">{user.username}</span>
+                        {isLocked(user) && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700" title="Account locked due to too many failed login attempts">
+                            Locked
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                         user.role === "admin"
@@ -247,6 +278,14 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-3">
+                        {isLocked(user) && (
+                          <button
+                            onClick={() => handleUnlock(user)}
+                            className="text-green-600 hover:text-green-800 text-sm font-medium"
+                          >
+                            Unlock
+                          </button>
+                        )}
                         <button
                           onClick={() => handleEdit(user)}
                           className="text-blue-600 hover:text-blue-800 text-sm font-medium"

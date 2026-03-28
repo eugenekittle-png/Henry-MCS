@@ -4,7 +4,7 @@ import { parseFile } from "@/lib/parsers";
 import { MAX_FILE_SIZE, COMPARE_EXTENSIONS } from "@/lib/constants";
 import { getClient, getMatter } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { logAction } from "@/lib/audit";
+import { logAction, getClientIp } from "@/lib/audit";
 
 export interface DiffLine {
   type: "added" | "removed" | "unchanged";
@@ -13,6 +13,7 @@ export interface DiffLine {
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
+  const ip = getClientIp(req);
 
   try {
     const formData = await req.formData();
@@ -76,12 +77,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await logAction({ username: session?.username ?? null, action: "Compare-Diff", clientNumber, matterNumber, details, success: true });
+    await logAction({ username: session?.username ?? null, action: "Compare-Diff", clientNumber, matterNumber, details, success: true, ipAddress: ip });
 
     return Response.json({ file1Name: file1.name, file2Name: file2.name, lines });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    await logAction({ username: session?.username ?? null, action: "Compare-Diff", details: { error: message }, success: false });
+    await logAction({ username: session?.username ?? null, action: "Compare-Diff", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status: 500 });
   }
 }

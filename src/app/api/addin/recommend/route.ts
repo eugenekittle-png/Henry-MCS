@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createStream } from "@/lib/anthropic";
 import { ASSIST_SYSTEM_PROMPT } from "@/lib/constants";
 import { getSessionFromRequest } from "@/lib/auth";
-import { logAction } from "@/lib/audit";
+import { logAction, getClientIp } from "@/lib/audit";
 
 export const maxDuration = 300;
 
@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const ip = getClientIp(req);
 
   try {
     const { text, prompt, client, matter, clientNumber, matterNumber } = await req.json();
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
             tokensInput,
             tokensOutput,
             success,
+            ipAddress: ip,
           });
         }
       },
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session.username, action: "Recommend", details: { error: message, source: "word-addin" }, success: false });
+    logAction({ username: session.username, action: "Recommend", details: { error: message, source: "word-addin" }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status: 500 });
   }
 }
