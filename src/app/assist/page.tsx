@@ -89,9 +89,9 @@ export default function AssistPage() {
     setError(null);
   }, []);
 
-  const handleSubmit = useCallback(async (e: FormEvent) => {
-    e.preventDefault();
-    const prompt = input.trim();
+  const handleSubmit = useCallback(async (e: FormEvent | null, promptOverride?: string) => {
+    if (e) e.preventDefault();
+    const prompt = (promptOverride ?? input).trim();
     if (!prompt || isStreaming || !selectedClient || !selectedMatter) return;
 
     setInput("");
@@ -183,6 +183,34 @@ export default function AssistPage() {
       setIsStreaming(false);
     }
   }, [input, isStreaming, selectedClient, selectedMatter, files, apiHistory]);
+
+  const QUICK_ACTIONS = [
+    {
+      label: "Summarize",
+      prompt: "Please provide a comprehensive summary with key findings, structured sections, and inline citations for each referenced document.",
+      icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
+    },
+    {
+      label: "Key Dates",
+      prompt: "Please extract all key dates from these documents, including deadlines, effective dates, expiration dates, and any other important dates. Present them in a structured list.",
+      icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />,
+    },
+    {
+      label: "Identify Parties",
+      prompt: "Please identify all parties in these documents, their roles, and their relationships to each other.",
+      icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />,
+    },
+    {
+      label: "List Obligations",
+      prompt: "Please list all obligations and commitments for each party in these documents, structured by party.",
+      icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />,
+    },
+    {
+      label: "Flag Risks",
+      prompt: "Please identify any unusual clauses, missing provisions, or potential risks in these documents that warrant attention.",
+      icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />,
+    },
+  ];
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -324,31 +352,43 @@ export default function AssistPage() {
         </div>
       )}
 
-      {/* Quick-action buttons */}
-      {!hasMessages && (
-        <div className="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            disabled={!selectedMatter || isStreaming}
-            onClick={() => {
-              const prompt = files.length > 0
-                ? "Please provide a comprehensive summary with key findings, structured sections, and inline citations for each referenced document."
-                : "Please provide a comprehensive summary with key findings and structured sections.";
-              setInput(prompt);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-blue-200"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Summarize
-          </button>
-        </div>
-      )}
-
       {/* Input area */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <form onSubmit={handleSubmit} className="flex items-end">
+        {/* File upload — top of card, locked once conversation starts */}
+        {!hasMessages && (
+          <div className="px-4 py-3 space-y-2 border-b border-gray-100">
+            <FileDropZone onFiles={handleFiles} />
+            <FileList files={files} onRemove={handleRemoveFile} />
+            {files.length === 0 && (
+              <p className="text-xs text-gray-400">
+                Documents are optional — you can ask questions without uploading anything.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Quick-action buttons — only when documents are uploaded */}
+        {!hasMessages && files.length > 0 && (
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="text-xs text-gray-400 mb-2">Quick actions — click to run instantly</p>
+            <div className="flex gap-2 flex-wrap">
+              {QUICK_ACTIONS.map(({ label, prompt, icon }) => (
+                <button
+                  key={label}
+                  type="button"
+                  disabled={!selectedMatter || isStreaming}
+                  onClick={() => handleSubmit(null, prompt)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-blue-200"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">{icon}</svg>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={(e) => handleSubmit(e)} className="flex items-end">
           <textarea
             ref={inputRef}
             rows={4}
@@ -364,7 +404,7 @@ export default function AssistPage() {
               !selectedMatter
                 ? "Select a client and matter above, then ask anything..."
                 : files.length > 0 && !hasMessages
-                ? `Ask about your ${files.length} document${files.length !== 1 ? "s" : ""}...`
+                ? `Or type a custom question about your ${files.length} document${files.length !== 1 ? "s" : ""}...`
                 : "Ask anything... (Shift+Enter for new line)"
             }
             disabled={isStreaming}
@@ -378,18 +418,6 @@ export default function AssistPage() {
             {isStreaming ? "..." : "Send"}
           </button>
         </form>
-        {/* File upload — below prompt, locked once conversation starts */}
-        {!hasMessages && (
-          <div className="border-t border-gray-100 px-4 py-3 space-y-2">
-            <FileDropZone onFiles={handleFiles} />
-            <FileList files={files} onRemove={handleRemoveFile} />
-            {files.length === 0 && (
-              <p className="text-xs text-gray-400">
-                Documents are optional — you can ask questions without uploading anything.
-              </p>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
