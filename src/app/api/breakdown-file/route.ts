@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
 import JSZip from "jszip";
 import { parseFile } from "@/lib/parsers";
-import { createStream } from "@/lib/anthropic";
-import { SUMMARY_SYSTEM_PROMPT, MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
+import { parseImage, IMAGE_EXTS } from "@/lib/parsers/image";
+import { createStream, createVisionStream } from "@/lib/anthropic";
+import { SUMMARY_SYSTEM_PROMPT, IMAGE_ANALYSIS_SYSTEM_PROMPT, MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
 import { getClient, getMatter } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAction, getClientIp } from "@/lib/audit";
@@ -35,12 +36,8 @@ export async function POST(req: NextRequest) {
     const fileBuffer = Buffer.from(await entry.async("arraybuffer"));
     const fileName = filePath.split("/").pop() || filePath;
 
-    let text: string;
-    try {
-      text = await parseFile(fileBuffer, fileName);
-    } catch {
-      return Response.json({ error: `Could not parse ${fileName}` }, { status: 400 });
-    }
+    const fileExt = fileName.includes(".") ? fileName.substring(fileName.lastIndexOf(".")).toLowerCase() : "";
+    const isImage = IMAGE_EXTS.has(fileExt);
 
     let contextPrefix = "";
     const contextDetails: Record<string, unknown> = { zipFile: zipFile.name, file: filePath };
@@ -58,8 +55,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const userMessage = `${contextPrefix}Here is the document to summarize:\n\n<documents>\n=== ${fileName} ===\n${text}\n</documents>`;
-    const stream = createStream(SUMMARY_SYSTEM_PROMPT, userMessage);
+    let stream: ReturnType<typeof createStream>;
+    if (isImage) {
+      let imageData: { base64: string; mimeType: string };
+      try {
+        imageData = await parseImage(fileBuffer, fileName);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return Response.json({ error: msg }, { status: 400 });
+      }
+      const contextText = contextPrefix
+        ? `${contextPrefix}Please analyze this image from the discovery document set.`
+        : "Please analyze this image from the discovery document set.";
+      stream = createVisionStream(IMAGE_ANALYSIS_SYSTEM_PROMPT, imageData.base64, imageData.mimeType, contextText) as ReturnType<typeof createStream>;
+    } else {
+      let text: string;
+      try {
+        text = await parseFile(fileBuffer, fileName);
+      } catch {
+        return Response.json({ error: `Could not parse ${fileName}` }, { status: 400 });
+      }
+      const userMessage = `${contextPrefix}Here is the document to summarize:\n\n<documents>\n=== ${fileName} ===\n${text}\n</documents>`;
+      stream = createStream(SUMMARY_SYSTEM_PROMPT, userMessage);
+    }
 
     const encoder = new TextEncoder();
     let tokensInput = 0;

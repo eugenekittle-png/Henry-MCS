@@ -24,6 +24,7 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
     "remark-gfm": "^4.0.1",
+    "sharp": "^0.34.5",
     "word-extractor": "^1.0.4",
     "xlsx": "^0.18.5"
   },

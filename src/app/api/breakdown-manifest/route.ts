@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 
-export type FileStatus = "extractable" | "image" | "unsupported" | "skipped";
+export type FileStatus = "extractable" | "image" | "video" | "unsupported" | "skipped";
 
 export interface ManifestFile {
   name: string;
@@ -16,6 +16,7 @@ export interface ManifestFile {
 export interface ManifestSummary {
   extractable: number;
   image: number;
+  video: number;
   unsupported: number;
   skipped: number;
   total: number;
@@ -28,6 +29,7 @@ export interface ManifestResponse {
 
 const EXTRACTABLE_EXTS = new Set([".pdf", ".doc", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv"]);
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".tiff", ".tif", ".bmp", ".webp", ".heic", ".heif"]);
+const VIDEO_EXTS = new Set([".mp4", ".mov", ".avi", ".mkv", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg", ".3gp"]);
 // System/binary files that should always be silently skipped
 const SYSTEM_EXTS = new Set([
   ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs",
@@ -44,6 +46,7 @@ function classifyFile(name: string): FileStatus {
   if (SYSTEM_EXTS.has(ext)) return "skipped";
   if (EXTRACTABLE_EXTS.has(ext)) return "extractable";
   if (IMAGE_EXTS.has(ext)) return "image";
+  if (VIDEO_EXTS.has(ext)) return "video";
   return "unsupported";
 }
 
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
     const zip = await JSZip.loadAsync(buffer);
 
     const files: ManifestFile[] = [];
-    const summary: ManifestSummary = { extractable: 0, image: 0, unsupported: 0, skipped: 0, total: 0 };
+    const summary: ManifestSummary = { extractable: 0, image: 0, video: 0, unsupported: 0, skipped: 0, total: 0 };
 
     for (const [path, entry] of Object.entries(zip.files)) {
       if (entry.dir) continue;
@@ -96,8 +99,8 @@ export async function POST(req: NextRequest) {
       summary.total++;
     }
 
-    // Sort: extractable first, then image, then unsupported; alpha within each group
-    const ORDER: Record<FileStatus, number> = { extractable: 0, image: 1, unsupported: 2, skipped: 3 };
+    // Sort: extractable first, then image, then video, then unsupported; alpha within each group
+    const ORDER: Record<FileStatus, number> = { extractable: 0, image: 1, video: 2, unsupported: 3, skipped: 4 };
     files.sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.name.localeCompare(b.name));
 
     return Response.json({ files, summary } satisfies ManifestResponse);
