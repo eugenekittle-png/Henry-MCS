@@ -3,6 +3,7 @@ export interface ParsedDocument {
   content: string;
   type: string;
   size: number;
+  imageData?: { base64: string; mimeType: string };
 }
 
 export interface FileValidationError {

@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { parseZip } from "@/lib/parsers/zip";
-import { createStream } from "@/lib/anthropic";
+import { createChatStream } from "@/lib/anthropic";
 import { BREAKDOWN_SYSTEM_PROMPT, MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
+import type { TextBlockParam, ImageBlockParam } from "@anthropic-ai/sdk/resources/messages";
 import { getClient, getMatter } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { logAction, getClientIp } from "@/lib/audit";
@@ -68,13 +69,31 @@ export async function POST(req: NextRequest) {
 
           contextDetails.documentCount = documents.length;
 
-          // Phase 2: send to Claude
+          // Phase 2: send to Claude with mixed text/image content
           emit(controller, encoder, { progress: { stage: "analyzing", current: documents.length, total: documents.length, file: "" } });
 
-          const documentTexts = documents.map(doc => `=== ${doc.name} (${doc.type}) ===\n${doc.content}`);
-          const combinedContent = documentTexts.join("\n\n---\n\n");
-          const userMessage = `${contextPrefix}Here is a collection of ${documents.length} documents extracted from a zip file. Please catalog and analyze them:\n\n<documents>\n${combinedContent}\n</documents>`;
-          const stream = createStream(BREAKDOWN_SYSTEM_PROMPT, userMessage);
+          const contentBlocks: Array<TextBlockParam | ImageBlockParam> = [];
+          contentBlocks.push({ type: "text", text: `${contextPrefix}Here is a collection of ${documents.length} file${documents.length !== 1 ? "s" : ""} extracted from a zip file. Please catalog and analyze them:\n\n<documents>` });
+
+          for (const doc of documents) {
+            contentBlocks.push({ type: "text", text: `\n\n=== ${doc.name} (${doc.type}) ===\n` });
+            if (doc.imageData) {
+              contentBlocks.push({
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: doc.imageData.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                  data: doc.imageData.base64,
+                },
+              });
+            } else {
+              contentBlocks.push({ type: "text", text: doc.content });
+            }
+          }
+
+          contentBlocks.push({ type: "text", text: "\n</documents>" });
+
+          const stream = createChatStream(BREAKDOWN_SYSTEM_PROMPT, [{ role: "user", content: contentBlocks }]);
 
           for await (const event of stream) {
             if (event.type === "message_start") {

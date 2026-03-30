@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 
-export type FileStatus = "extractable" | "image" | "video" | "unsupported" | "skipped";
+export type FileStatus = "extractable" | "image" | "image_large" | "video" | "unsupported" | "skipped";
 
 export interface ManifestFile {
   name: string;
@@ -16,6 +16,7 @@ export interface ManifestFile {
 export interface ManifestSummary {
   extractable: number;
   image: number;
+  image_large: number;
   video: number;
   unsupported: number;
   skipped: number;
@@ -38,14 +39,16 @@ const SYSTEM_EXTS = new Set([
   ".db", ".sqlite",
 ]);
 
-function classifyFile(name: string): FileStatus {
+const MAX_AUTO_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+function classifyFile(name: string, size: number): FileStatus {
   if (name.startsWith(".") || name.startsWith("__") || name === "Thumbs.db" || name === "desktop.ini") {
     return "skipped";
   }
   const ext = name.includes(".") ? name.substring(name.lastIndexOf(".")).toLowerCase() : "";
   if (SYSTEM_EXTS.has(ext)) return "skipped";
   if (EXTRACTABLE_EXTS.has(ext)) return "extractable";
-  if (IMAGE_EXTS.has(ext)) return "image";
+  if (IMAGE_EXTS.has(ext)) return size <= MAX_AUTO_IMAGE_SIZE ? "image" : "image_large";
   if (VIDEO_EXTS.has(ext)) return "video";
   return "unsupported";
 }
@@ -71,7 +74,7 @@ export async function POST(req: NextRequest) {
     const zip = await JSZip.loadAsync(buffer);
 
     const files: ManifestFile[] = [];
-    const summary: ManifestSummary = { extractable: 0, image: 0, video: 0, unsupported: 0, skipped: 0, total: 0 };
+    const summary: ManifestSummary = { extractable: 0, image: 0, image_large: 0, video: 0, unsupported: 0, skipped: 0, total: 0 };
 
     for (const [path, entry] of Object.entries(zip.files)) {
       if (entry.dir) continue;
@@ -80,12 +83,13 @@ export async function POST(req: NextRequest) {
       if (path.includes("__MACOSX/")) continue;
 
       const name = path.split("/").pop() || path;
-      const status = classifyFile(name);
 
-      // Don't surface skipped files at all
-      if (status === "skipped") continue;
+      // Don't surface skipped files at all — pre-check by name before reading buffer
+      const preStatus = classifyFile(name, 0);
+      if (preStatus === "skipped") continue;
 
       const fileBuffer = Buffer.from(await entry.async("arraybuffer"));
+      const status = classifyFile(name, fileBuffer.length);
 
       files.push({
         name,
@@ -99,8 +103,8 @@ export async function POST(req: NextRequest) {
       summary.total++;
     }
 
-    // Sort: extractable first, then image, then video, then unsupported; alpha within each group
-    const ORDER: Record<FileStatus, number> = { extractable: 0, image: 1, video: 2, unsupported: 3, skipped: 4 };
+    // Sort: extractable first, then image, then image_large, then video, then unsupported
+    const ORDER: Record<FileStatus, number> = { extractable: 0, image: 1, image_large: 2, video: 3, unsupported: 4, skipped: 5 };
     files.sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.name.localeCompare(b.name));
 
     return Response.json({ files, summary } satisfies ManifestResponse);

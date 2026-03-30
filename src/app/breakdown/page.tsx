@@ -15,7 +15,8 @@ type FileStatus = ManifestFile["status"];
 
 const STATUS_LABEL: Record<FileStatus, string> = {
   extractable: "Will be read",
-  image: "Image",
+  image: "Will be analyzed",
+  image_large: "Image — too large (>5 MB)",
   video: "Video — not supported",
   unsupported: "Unsupported type",
   skipped: "Skipped",
@@ -23,7 +24,8 @@ const STATUS_LABEL: Record<FileStatus, string> = {
 
 const STATUS_COLOR: Record<FileStatus, string> = {
   extractable: "bg-green-100 text-green-800",
-  image: "bg-amber-100 text-amber-800",
+  image: "bg-green-100 text-green-800",
+  image_large: "bg-amber-100 text-amber-800",
   video: "bg-red-100 text-red-700",
   unsupported: "bg-gray-100 text-gray-600",
   skipped: "bg-gray-100 text-gray-400",
@@ -57,8 +59,16 @@ async function streamResponse(
 ): Promise<void> {
   const response = await fetch(url, { method: "POST", body: formData });
   if (!response.ok) {
-    const data = await response.json();
-    throw new Error(data.error || "Request failed");
+    if (response.status === 413) throw new Error("File is too large to upload. Try a smaller zip file.");
+    let errorMsg = `Request failed (${response.status})`;
+    try {
+      const data = await response.json();
+      errorMsg = data.error || errorMsg;
+    } catch {
+      const text = await response.text().catch(() => "");
+      if (text) errorMsg = text.slice(0, 200);
+    }
+    throw new Error(errorMsg);
   }
   const reader = response.body?.getReader();
   if (!reader) throw new Error("No response stream");
@@ -138,7 +148,7 @@ export default function BreakdownPage() {
 
   const isBusy = isStreaming || focusedStreaming;
   const canScan = files.length > 0 && selectedClient && selectedMatter && !isScanning && !isBusy;
-  const canAnalyzeAll = !!manifest && (manifest.summary.extractable > 0 || manifest.summary.image > 0) && selectedClient && selectedMatter && !isBusy;
+  const canAnalyzeAll = !!manifest && (manifest.summary.extractable > 0 || manifest.summary.image > 0) && !!selectedClient && !!selectedMatter && !isBusy;
   const hasResults = !!content || isStreaming;
 
   const handleReset = useCallback(() => {
@@ -167,8 +177,19 @@ export default function BreakdownPage() {
       const formData = new FormData();
       formData.append("file", files[0]);
       const res = await fetch("/api/breakdown-manifest", { method: "POST", body: formData });
+      if (!res.ok) {
+        let errorMsg = `Upload failed (${res.status})`;
+        try {
+          const data = await res.json();
+          errorMsg = data.error || errorMsg;
+        } catch {
+          const text = await res.text().catch(() => "");
+          if (text) errorMsg = text.slice(0, 200);
+        }
+        if (res.status === 413) errorMsg = "File is too large to upload. Try a smaller zip file.";
+        throw new Error(errorMsg);
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Scan failed");
       setManifest(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -178,7 +199,7 @@ export default function BreakdownPage() {
   }, [files, selectedClient, selectedMatter]);
 
   const handleAnalyzeAll = useCallback(async () => {
-    if (!files.length || !selectedClient || !selectedMatter || !manifest) return;
+    if (!files.length || !selectedClient || !selectedMatter) return;
     setContent("");
     setError(null);
     setProgress(null);
@@ -186,49 +207,24 @@ export default function BreakdownPage() {
     setFocusedContent("");
     setManifestCollapsed(true);
     setIsStreaming(true);
-
+    const formData = new FormData();
+    formData.append("file", files[0]);
+    formData.append("clientId", String(selectedClient.id));
+    formData.append("matterId", String(selectedMatter.id));
     try {
-      // Phase 1: analyze all extractable documents in one call
-      if (manifest.summary.extractable > 0) {
-        const formData = new FormData();
-        formData.append("file", files[0]);
-        formData.append("clientId", String(selectedClient.id));
-        formData.append("matterId", String(selectedMatter.id));
-        await streamResponse(
-          "/api/breakdown",
-          formData,
-          (text) => setContent(prev => prev + text),
-          (err) => setError(err),
-          (p) => setProgress(p as { stage: string; current: number; total: number; file: string }),
-        );
-      }
-
-      // Phase 2: analyze images one at a time
-      const imageFiles = manifest.files.filter(f => f.status === "image");
-      for (let i = 0; i < imageFiles.length; i++) {
-        const imgFile = imageFiles[i];
-        setProgress({ stage: "images", current: i + 1, total: imageFiles.length, file: imgFile.name });
-        setContent(prev => prev + `\n\n---\n\n## Image: ${imgFile.name}\n\n`);
-
-        const imgFormData = new FormData();
-        imgFormData.append("file", files[0]);
-        imgFormData.append("filePath", imgFile.path);
-        imgFormData.append("clientId", String(selectedClient.id));
-        imgFormData.append("matterId", String(selectedMatter.id));
-        await streamResponse(
-          "/api/breakdown-file",
-          imgFormData,
-          (text) => setContent(prev => prev + text),
-          (err) => setError(err),
-        );
-      }
+      await streamResponse(
+        "/api/breakdown",
+        formData,
+        (text) => setContent(prev => prev + text),
+        (err) => { setError(err); setIsStreaming(false); },
+        (p) => setProgress(p as { stage: string; current: number; total: number; file: string }),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsStreaming(false);
-      setProgress(null);
     }
-  }, [files, selectedClient, selectedMatter, manifest]);
+  }, [files, selectedClient, selectedMatter]);
 
   const handleAnalyzeFile = useCallback(async (manifestFile: ManifestFile) => {
     if (!files.length || !selectedClient || !selectedMatter) return;
@@ -340,11 +336,11 @@ export default function BreakdownPage() {
               </span>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-3 text-xs text-gray-500">
-                  {manifest.summary.extractable > 0 && (
-                    <span className="text-green-700">{manifest.summary.extractable} readable</span>
+                  {(manifest.summary.extractable + manifest.summary.image) > 0 && (
+                    <span className="text-green-700">{manifest.summary.extractable + manifest.summary.image} processable</span>
                   )}
-                  {manifest.summary.image > 0 && (
-                    <span className="text-amber-700">{manifest.summary.image} image{manifest.summary.image !== 1 ? "s" : ""}</span>
+                  {manifest.summary.image_large > 0 && (
+                    <span className="text-amber-700">{manifest.summary.image_large} large image{manifest.summary.image_large !== 1 ? "s" : ""}</span>
                   )}
                   {manifest.summary.video > 0 && (
                     <span className="text-red-600">{manifest.summary.video} video{manifest.summary.video !== 1 ? "s" : ""}</span>
@@ -379,7 +375,7 @@ export default function BreakdownPage() {
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[f.status]}`}>
                           {STATUS_LABEL[f.status]}
                         </span>
-                        {(f.status === "extractable" || f.status === "image") && (
+                        {(f.status === "extractable" || f.status === "image" || f.status === "image_large") && (
                           <button
                             onClick={() => handleAnalyzeFile(f)}
                             disabled={isBusy}
@@ -403,7 +399,7 @@ export default function BreakdownPage() {
 
                 {manifest.summary.extractable === 0 && manifest.summary.image === 0 && (
                   <div className="px-4 py-3 bg-amber-50 border-t border-amber-200 text-sm text-amber-800">
-                    No readable files found. The zip contains only videos or unsupported file types.
+                    No processable files found. The zip may contain only large images, videos, or unsupported file types.
                   </div>
                 )}
               </>
@@ -419,13 +415,9 @@ export default function BreakdownPage() {
               className="w-full bg-green-600 text-white py-3 px-4 rounded-xl font-medium hover:bg-green-700 transition-colors"
             >
               {(() => {
-                const docs = manifest!.summary.extractable;
-                const imgs = manifest!.summary.image;
-                const parts = [];
-                if (docs > 0) parts.push(`${docs} document${docs !== 1 ? "s" : ""}`);
-                if (imgs > 0) parts.push(`${imgs} image${imgs !== 1 ? "s" : ""}`);
-                const skipped = manifest!.summary.total - docs - imgs;
-                return `Analyze all ${parts.join(" and ")}${skipped > 0 ? ` (${skipped} file${skipped !== 1 ? "s" : ""} will be skipped)` : ""}`;
+                const processable = manifest!.summary.extractable + manifest!.summary.image;
+                const skipped = manifest!.summary.total - processable;
+                return `Analyze all ${processable} file${processable !== 1 ? "s" : ""}${skipped > 0 ? ` (${skipped} will be skipped)` : ""}`;
               })()}
             </button>
             <p className="text-xs text-center text-gray-400">
@@ -446,22 +438,6 @@ export default function BreakdownPage() {
                 <div className="w-full bg-gray-200 rounded-full h-1.5">
                   <div
                     className="bg-green-500 h-1.5 rounded-full transition-all duration-300"
-                    style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
-                  />
-                </div>
-                {progress.file && (
-                  <p className="text-xs text-gray-400 truncate">{progress.file}</p>
-                )}
-              </>
-            ) : progress?.stage === "images" ? (
-              <>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 font-medium">Analyzing images...</span>
-                  <span className="text-gray-400">{progress.current} / {progress.total}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div
-                    className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
                     style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
                   />
                 </div>

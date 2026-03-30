@@ -1,8 +1,10 @@
 import JSZip from "jszip";
 import { parseFile } from "./index";
+import { parseImage, IMAGE_EXTS } from "./image";
 import type { ParsedDocument } from "@/types";
 
 const EXTRACTABLE_EXTS = new Set([".pdf", ".doc", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv"]);
+const MAX_AUTO_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 interface ZipEntry {
   path: string;
@@ -18,8 +20,12 @@ async function collectEntries(zip: JSZip): Promise<ZipEntry[]> {
     const name = path.split("/").pop() || path;
     if (name.startsWith(".") || name.startsWith("__")) continue;
     const ext = name.includes(".") ? name.substring(name.lastIndexOf(".")).toLowerCase() : "";
-    if (!EXTRACTABLE_EXTS.has(ext)) continue;
+    const isExtractable = EXTRACTABLE_EXTS.has(ext);
+    const isImage = IMAGE_EXTS.has(ext);
+    if (!isExtractable && !isImage) continue;
     const buffer = Buffer.from(await file.async("arraybuffer"));
+    // Only auto-include images up to 5 MB; larger images are skipped from batch
+    if (isImage && buffer.length > MAX_AUTO_IMAGE_SIZE) continue;
     entries.push({ path, name, buffer });
   }
   return entries;
@@ -49,8 +55,13 @@ export async function parseZip(
       const { path, name, buffer: fileBuffer } = entries[i];
       const ext = name.substring(name.lastIndexOf(".")).toLowerCase();
       try {
-        const content = await parseFile(fileBuffer, name);
-        results[i] = { name: path, content, type: ext, size: fileBuffer.length };
+        if (IMAGE_EXTS.has(ext)) {
+          const imageData = await parseImage(fileBuffer, name);
+          results[i] = { name: path, content: "(image)", type: ext, size: fileBuffer.length, imageData };
+        } else {
+          const content = await parseFile(fileBuffer, name);
+          results[i] = { name: path, content, type: ext, size: fileBuffer.length };
+        }
       } catch {
         results[i] = { name: path, content: "(Failed to parse file)", type: ext, size: 0 };
       }
