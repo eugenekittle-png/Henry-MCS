@@ -136,14 +136,17 @@ export default function Navbar() {
           <span className="w-px bg-gray-700 mx-1" />
           <Link
             href="/my-usage"
-            className="text-gray-400 hover:text-white text-xs px-2 transition-colors"
+            className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-white/10 transition-colors group"
             title="My Usage"
           >
-            {user.username}
+            <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+              {user.username[0]?.toUpperCase() ?? "U"}
+            </div>
+            <span className="text-gray-300 group-hover:text-white text-sm font-medium">{user.username}</span>
           </Link>
           <button
             onClick={logout}
-            className="px-3 py-2 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+            className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-300 border border-gray-700 hover:border-gray-500 hover:text-white hover:bg-white/10 transition-colors"
           >
             Logout
           </button>
