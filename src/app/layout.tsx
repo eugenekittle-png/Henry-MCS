@@ -19,6 +19,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Henry MCS - Document Analysis Tools",
   description: "AI-powered document summary and breakdown tools",
+  icons: {
+    icon: "/images/henry-mcs.gif",
+  },
 };
 
 export default function RootLayout({
