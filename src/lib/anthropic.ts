@@ -3,6 +3,22 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 
 const client = new Anthropic();
 
+/**
+ * Converts a raw Anthropic SDK error into a user-friendly message.
+ * The SDK sometimes surfaces the full JSON error body as err.message.
+ */
+export function parseApiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : "Something went wrong";
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.error?.type === "overloaded_error") {
+      return "Claude is currently overloaded. Please try again in a moment.";
+    }
+    if (parsed?.error?.message) return parsed.error.message;
+  } catch { /* not JSON — use as-is */ }
+  return raw;
+}
+
 export function createStream(systemPrompt: string, userContent: string) {
   return client.messages.stream({
     model: "claude-sonnet-4-6",

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { createChatStream } from "@/lib/anthropic";
+import { createChatStream, parseApiError } from "@/lib/anthropic";
 import { getSessionFromRequest } from "@/lib/auth";
 import { detectSuspicious } from "@/lib/security";
 import { logAction, getClientIp } from "@/lib/audit";
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
           controller.close();
         } catch (err) {
           success = false;
-          const message = err instanceof Error ? err.message : "Stream error";
+          const message = parseApiError(err);
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`));
           controller.close();
         } finally {
