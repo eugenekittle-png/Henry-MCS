@@ -4,16 +4,31 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 const client = new Anthropic();
 
 /**
+ * Returns true if the error is a transient overload (HTTP 529).
+ */
+export function isOverloadedError(err: unknown): boolean {
+  if (err instanceof Anthropic.APIError && err.status === 529) return true;
+  // Fallback: SDK sometimes surfaces JSON as the error message
+  if (err instanceof Error) {
+    try {
+      const parsed = JSON.parse(err.message);
+      if (parsed?.error?.type === "overloaded_error") return true;
+    } catch { /* not JSON */ }
+  }
+  return false;
+}
+
+/**
  * Converts a raw Anthropic SDK error into a user-friendly message.
  * The SDK sometimes surfaces the full JSON error body as err.message.
  */
 export function parseApiError(err: unknown): string {
+  if (isOverloadedError(err)) {
+    return "Claude is currently overloaded. Please try again in a moment.";
+  }
   const raw = err instanceof Error ? err.message : "Something went wrong";
   try {
     const parsed = JSON.parse(raw);
-    if (parsed?.error?.type === "overloaded_error") {
-      return "Claude is currently overloaded. Please try again in a moment.";
-    }
     if (parsed?.error?.message) return parsed.error.message;
   } catch { /* not JSON — use as-is */ }
   return raw;

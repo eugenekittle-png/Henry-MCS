@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { createStream, parseApiError } from "@/lib/anthropic";
+import { createStream, parseApiError, isOverloadedError } from "@/lib/anthropic";
 import { ASSIST_SYSTEM_PROMPT } from "@/lib/constants";
 import { getSessionFromRequest } from "@/lib/auth";
 import { logAction, getClientIp } from "@/lib/audit";
@@ -25,7 +25,9 @@ export async function POST(req: NextRequest) {
 
     const context = [client && `Client: ${client}`, matter && `Matter: ${matter}`].filter(Boolean).join("\n");
     const userMessage = `${context ? context + "\n\n" : ""}Here is the document text:\n\n${text}\n\n${prompt}`;
-    const stream = createStream(ASSIST_SYSTEM_PROMPT, userMessage);
+
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 3000;
 
     const encoder = new TextEncoder();
     let tokensInput = 0;
@@ -34,36 +36,52 @@ export async function POST(req: NextRequest) {
     const readable = new ReadableStream({
       async start(controller) {
         let success = true;
-        try {
-          for await (const event of stream) {
-            if (event.type === "message_start") {
-              tokensInput = event.message.usage.input_tokens;
-            } else if (event.type === "message_delta") {
-              tokensOutput = event.usage.output_tokens;
-            } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
-            }
+        let lastErr: unknown;
+
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          if (attempt > 1) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * (attempt - 1)));
           }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        } catch (err) {
+          try {
+            const stream = createStream(ASSIST_SYSTEM_PROMPT, userMessage);
+            for await (const event of stream) {
+              if (event.type === "message_start") {
+                tokensInput = event.message.usage.input_tokens;
+              } else if (event.type === "message_delta") {
+                tokensOutput = event.usage.output_tokens;
+              } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
+              }
+            }
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+            lastErr = undefined;
+            break; // success — exit retry loop
+          } catch (err) {
+            lastErr = err;
+            if (!isOverloadedError(err) || attempt === MAX_ATTEMPTS) break;
+            // Overloaded and retries remain — loop
+          }
+        }
+
+        if (lastErr !== undefined) {
           success = false;
-          const message = parseApiError(err);
+          const message = parseApiError(lastErr);
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`));
           controller.close();
-        } finally {
-          logAction({
-            username: session.username,
-            action: "Ask",
-            clientNumber: clientNumber || null,
-            matterNumber: matterNumber || null,
-            details: { source: "word-addin", prompt: prompt.slice(0, 200), client: client || undefined, matter: matter || undefined },
-            tokensInput,
-            tokensOutput,
-            success,
-            ipAddress: ip,
-          });
         }
+
+        logAction({
+          username: session.username,
+          action: "Ask",
+          clientNumber: clientNumber || null,
+          matterNumber: matterNumber || null,
+          details: { source: "word-addin", prompt: prompt.slice(0, 200), client: client || undefined, matter: matter || undefined },
+          tokensInput,
+          tokensOutput,
+          success,
+          ipAddress: ip,
+        });
       },
     });
 
