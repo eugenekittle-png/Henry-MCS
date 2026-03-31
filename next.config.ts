@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pdf-parse", "mammoth", "word-extractor", "pdfkit", "sharp", "pdfjs-dist"],
+  serverExternalPackages: ["pdf-parse", "mammoth", "word-extractor", "pdfkit", "sharp"],
   experimental: {
     serverActions: {
       bodySizeLimit: "50mb",
