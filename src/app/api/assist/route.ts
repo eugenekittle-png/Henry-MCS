@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Parse uploaded files (first message only)
+    // Parse uploaded files — scanned/corrupt PDFs fall back to Claude native document blocks
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pdfBlocks: { type: "document"; source: any }[] = [];
     let documentContext = "";
     const fileNames: string[] = [];
     for (const file of files) {
@@ -54,18 +56,40 @@ export async function POST(req: NextRequest) {
       if (!SUPPORTED_EXTENSIONS.includes(ext) || ext === ".zip") continue;
       if (file.size > MAX_FILE_SIZE) continue;
       const buffer = Buffer.from(await file.arrayBuffer());
-      const text = await parseFile(buffer, file.name);
-      documentContext += `=== ${file.name} ===\n${text}\n\n`;
+      let text = "";
+      let usePdfFallback = false;
+      try {
+        text = await parseFile(buffer, file.name);
+        if (ext === ".pdf" && text.trim().length < 100) usePdfFallback = true;
+      } catch {
+        if (ext === ".pdf") usePdfFallback = true;
+        else continue;
+      }
+      if (usePdfFallback) {
+        pdfBlocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: buffer.toString("base64") } });
+      } else {
+        documentContext += `=== ${file.name} ===\n${text}\n\n`;
+      }
       fileNames.push(file.name);
     }
 
     const suspiciousFlags = detectSuspicious(prompt);
 
-    const userContent = `${contextPrefix}${documentContext ? `The following documents have been provided for context:\n\n<documents>\n${documentContext}</documents>\n\n` : ""}${prompt}`;
+    const textContent = `${contextPrefix}${documentContext ? `The following documents have been provided for context:\n\n<documents>\n${documentContext}</documents>\n\n` : ""}${prompt}`;
+
+    // If any PDFs needed native reading, build a mixed content array; otherwise use plain string
+    const userMessageContent = pdfBlocks.length > 0
+      ? [...pdfBlocks, { type: "text" as const, text: textContent }]
+      : textContent;
+
+    // History always stores plain text (PDF blocks noted for context)
+    const userContent = pdfBlocks.length > 0
+      ? `${textContent}\n\n[${pdfBlocks.length} PDF(s) sent as native document]`
+      : textContent;
 
     const apiMessages: MessageParam[] = [
       ...history,
-      { role: "user", content: userContent },
+      { role: "user", content: userMessageContent as MessageParam["content"] },
     ];
 
     const stream = createChatStream(ASSIST_SYSTEM_PROMPT, apiMessages);
