@@ -23,6 +23,29 @@ export function createChatStream(systemPrompt: string, messages: MessageParam[])
   });
 }
 
+export function createDocumentStream(systemPrompt: string, pdfBase64: string, contextText: string) {
+  return client.messages.stream({
+    model: "claude-sonnet-4-6",
+    max_tokens: 8192,
+    system: systemPrompt,
+    messages: [{
+      role: "user",
+      content: [
+        {
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: pdfBase64,
+          },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+        { type: "text", text: contextText },
+      ],
+    }],
+  });
+}
+
 export function createVisionStream(systemPrompt: string, imageBase64: string, mimeType: string, contextText: string) {
   return client.messages.stream({
     model: "claude-sonnet-4-6",

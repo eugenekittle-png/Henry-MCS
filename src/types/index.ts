@@ -4,6 +4,7 @@ export interface ParsedDocument {
   type: string;
   size: number;
   imageData?: { base64: string; mimeType: string };
+  pdfData?: string; // base64 raw PDF bytes — set when text extraction yields < 100 chars (scanned PDF)
 }
 
 export interface FileValidationError {

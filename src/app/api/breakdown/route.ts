@@ -86,6 +86,13 @@ export async function POST(req: NextRequest) {
                   data: doc.imageData.base64,
                 },
               });
+            } else if (doc.pdfData) {
+              // Scanned PDF — send raw bytes for Claude to read natively
+              contentBlocks.push({
+                type: "document",
+                source: { type: "base64", media_type: "application/pdf", data: doc.pdfData },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              } as any);
             } else {
               contentBlocks.push({ type: "text", text: doc.content });
             }

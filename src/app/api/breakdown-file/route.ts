@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import JSZip from "jszip";
 import { parseFile } from "@/lib/parsers";
 import { parseImage, IMAGE_EXTS } from "@/lib/parsers/image";
-import { createStream, createVisionStream } from "@/lib/anthropic";
+import { createStream, createVisionStream, createDocumentStream } from "@/lib/anthropic";
 import { SUMMARY_SYSTEM_PROMPT, IMAGE_ANALYSIS_SYSTEM_PROMPT, MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
 import { getClient, getMatter } from "@/lib/db";
 import { getSession } from "@/lib/auth";
@@ -75,8 +75,16 @@ export async function POST(req: NextRequest) {
       } catch {
         return Response.json({ error: `Could not parse ${fileName}` }, { status: 400 });
       }
-      const userMessage = `${contextPrefix}Here is the document to summarize:\n\n<documents>\n=== ${fileName} ===\n${text}\n</documents>`;
-      stream = createStream(SUMMARY_SYSTEM_PROMPT, userMessage);
+      // Detect scanned PDF — fall back to Claude's native PDF reading
+      if (fileExt === ".pdf" && text.trim().length < 100) {
+        const contextText = contextPrefix
+          ? `${contextPrefix}Please summarize this document.`
+          : "Please summarize this document.";
+        stream = createDocumentStream(SUMMARY_SYSTEM_PROMPT, fileBuffer.toString("base64"), contextText) as ReturnType<typeof createStream>;
+      } else {
+        const userMessage = `${contextPrefix}Here is the document to summarize:\n\n<documents>\n=== ${fileName} ===\n${text}\n</documents>`;
+        stream = createStream(SUMMARY_SYSTEM_PROMPT, userMessage);
+      }
     }
 
     const encoder = new TextEncoder();

@@ -60,7 +60,12 @@ export async function parseZip(
           results[i] = { name: path, content: "(image)", type: ext, size: fileBuffer.length, imageData };
         } else {
           const content = await parseFile(fileBuffer, name);
-          results[i] = { name: path, content, type: ext, size: fileBuffer.length };
+          // Detect scanned PDFs: text extraction yielded almost nothing
+          if (ext === ".pdf" && content.trim().length < 100) {
+            results[i] = { name: path, content: "(scanned PDF)", type: ext, size: fileBuffer.length, pdfData: fileBuffer.toString("base64") };
+          } else {
+            results[i] = { name: path, content, type: ext, size: fileBuffer.length };
+          }
         }
       } catch {
         results[i] = { name: path, content: "(Failed to parse file)", type: ext, size: 0 };
