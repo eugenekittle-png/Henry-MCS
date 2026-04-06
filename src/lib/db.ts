@@ -548,7 +548,7 @@ export async function getAuditLogsFiltered(params: {
   if (from) { conditions.push("created_at >= ?"); args.push(from); }
   if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
   if (billableOnly) {
-    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
   }
 
@@ -583,7 +583,7 @@ export async function getAuditLogsFilteredCount(params: { from?: string; to?: st
   if (from) { conditions.push("created_at >= ?"); args.push(from); }
   if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
   if (billableOnly) {
-    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
   }
 
@@ -648,7 +648,7 @@ export interface UsageRow {
   total_output: number;
 }
 
-const BILLABLE_ACTIONS = ["assist", "chat", "breakdown", "compare", "compare-diff", "compare_diff", "summarize", "Ask"];
+const BILLABLE_ACTIONS = ["assist", "chat", "breakdown", "compare", "compare-diff", "compare_diff", "summarize", "ask", "breakdown-file"];
 
 export async function getUsageForUser(username: string, from?: string, to?: string, billableOnly = false) {
   await ensureInit();
@@ -657,7 +657,7 @@ export async function getUsageForUser(username: string, from?: string, to?: stri
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   if (billableOnly) {
-    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
   }
   const result = await db.execute({
@@ -685,7 +685,7 @@ export async function getUsageForUserByClient(username: string, from?: string, t
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   if (billableOnly) {
-    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
   }
   const result = await db.execute({
@@ -713,7 +713,7 @@ export async function getUsageForUserByMatter(username: string, from?: string, t
   if (from) { conditions.push("DATE(created_at) >= DATE(?)"); args.push(from); }
   if (to) { conditions.push("DATE(created_at) <= DATE(?)"); args.push(to); }
   if (billableOnly) {
-    conditions.push(`action IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
   }
   const result = await db.execute({
