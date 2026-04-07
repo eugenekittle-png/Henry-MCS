@@ -59,10 +59,18 @@ export async function parseZip(
           const imageData = await parseImage(fileBuffer, name);
           results[i] = { name: path, content: "(image)", type: ext, size: fileBuffer.length, imageData };
         } else {
-          const content = await parseFile(fileBuffer, name);
-          // Detect scanned PDFs: text extraction yielded almost nothing
-          if (ext === ".pdf" && content.trim().length < 100) {
-            results[i] = { name: path, content: "(scanned PDF)", type: ext, size: fileBuffer.length, pdfData: fileBuffer.toString("base64") };
+          let content = "";
+          let parseError = false;
+          try {
+            content = await parseFile(fileBuffer, name);
+          } catch {
+            parseError = true;
+          }
+          // Fall back to Claude native PDF reading if: parse failed (corrupt/bad XRef) or scanned (< 100 chars)
+          if (ext === ".pdf" && (parseError || content.trim().length < 100)) {
+            results[i] = { name: path, content: "(unreadable PDF)", type: ext, size: fileBuffer.length, pdfData: fileBuffer.toString("base64") };
+          } else if (parseError) {
+            results[i] = { name: path, content: "(Failed to parse file)", type: ext, size: 0 };
           } else {
             results[i] = { name: path, content, type: ext, size: fileBuffer.length };
           }

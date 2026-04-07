@@ -40,7 +40,7 @@ const ACTION_LABELS: Record<string, string> = {
   compare_diff: "Compare (Diff)",
   assist: "Assist",
   chat: "Chat",
-  Ask: "Ask (Word)",
+  ask: "Ask (Word)",
   user_create: "Create User",
   user_update: "Update User",
   user_delete: "Delete User",
@@ -54,7 +54,7 @@ const ACTION_LABELS: Record<string, string> = {
 const ACTION_COLORS: Record<string, string> = {
   assist: "bg-indigo-100 text-indigo-700",
   chat: "bg-indigo-100 text-indigo-700",
-  Ask: "bg-indigo-100 text-indigo-700",
+  ask: "bg-indigo-100 text-indigo-700",
   breakdown: "bg-green-100 text-green-700",
   compare: "bg-purple-100 text-purple-700",
   "compare-diff": "bg-purple-100 text-purple-700",
@@ -114,8 +114,9 @@ function fmtDateTime(iso: string) {
 }
 
 function ActionBadge({ action }: { action: string }) {
-  const label = ACTION_LABELS[action] ?? action;
-  const color = ACTION_COLORS[action] ?? "bg-gray-100 text-gray-600";
+  const key = action.toLowerCase();
+  const label = ACTION_LABELS[key] ?? action;
+  const color = ACTION_COLORS[key] ?? "bg-gray-100 text-gray-600";
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${color}`}>
       {label}
@@ -192,7 +193,7 @@ function DateFilter({ from, to, onFrom, onTo, onApply, onClear }: DateFilterProp
 function UsagePieChart({ rows, groupBy }: { rows: UsageRow[]; groupBy: Exclude<GroupBy, "log"> }) {
   const data = rows
     .map(r => ({
-      name: groupBy === "action" ? (ACTION_LABELS[r.label] ?? r.label) : r.label,
+      name: groupBy === "action" ? (ACTION_LABELS[r.label.toLowerCase()] ?? r.label) : r.label,
       cost: parseFloat(calcCost(r.total_input, r.total_output).toFixed(4)),
       requests: r.total_requests,
     }))
@@ -320,7 +321,7 @@ export default function MyUsagePage() {
 
   const totalCost = calcCost(totals.total_input, totals.total_output);
   const displayLabel = (row: UsageRow) =>
-    groupBy === "action" ? (ACTION_LABELS[row.label] ?? row.label) : row.label;
+    groupBy === "action" ? (ACTION_LABELS[row.label.toLowerCase()] ?? row.label) : row.label;
 
   const logLimit = 100;
   const logPageCount = Math.max(1, Math.ceil(logTotal / logLimit));

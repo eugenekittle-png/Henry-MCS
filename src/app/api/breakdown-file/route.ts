@@ -69,18 +69,21 @@ export async function POST(req: NextRequest) {
         : "Please analyze this image from the discovery document set.";
       stream = createVisionStream(IMAGE_ANALYSIS_SYSTEM_PROMPT, imageData.base64, imageData.mimeType, contextText) as ReturnType<typeof createStream>;
     } else {
-      let text: string;
+      let text = "";
+      let parseError = false;
       try {
         text = await parseFile(fileBuffer, fileName);
       } catch {
-        return Response.json({ error: `Could not parse ${fileName}` }, { status: 400 });
+        parseError = true;
       }
-      // Detect scanned PDF — fall back to Claude's native PDF reading
-      if (fileExt === ".pdf" && text.trim().length < 100) {
+      // Fall back to Claude native PDF reading if: parse failed (corrupt/bad XRef) or scanned (< 100 chars)
+      if (fileExt === ".pdf" && (parseError || text.trim().length < 100)) {
         const contextText = contextPrefix
           ? `${contextPrefix}Please summarize this document.`
           : "Please summarize this document.";
         stream = createDocumentStream(SUMMARY_SYSTEM_PROMPT, fileBuffer.toString("base64"), contextText) as ReturnType<typeof createStream>;
+      } else if (parseError) {
+        return Response.json({ error: `Could not parse ${fileName}` }, { status: 400 });
       } else {
         const userMessage = `${contextPrefix}Here is the document to summarize:\n\n<documents>\n=== ${fileName} ===\n${text}\n</documents>`;
         stream = createStream(SUMMARY_SYSTEM_PROMPT, userMessage);

@@ -103,6 +103,38 @@ async function ensureInit() {
     }
   }
 
+  // Create suggestions tables
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      is_anonymous INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'Submitted',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS suggestion_votes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      suggestion_id INTEGER NOT NULL REFERENCES suggestions(id),
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(suggestion_id, user_id)
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS suggestion_status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      suggestion_id INTEGER NOT NULL REFERENCES suggestions(id),
+      status TEXT NOT NULL,
+      comment TEXT,
+      changed_by TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   // Seed users if empty
   const userCount = await db.execute("SELECT COUNT(*) as count FROM users");
   if ((userCount.rows[0].count as number) === 0) {
@@ -749,4 +781,125 @@ export async function getAllMatters() {
     client_number: string;
     client_name: string;
   }[];
+}
+
+export type SuggestionStatus = "Submitted" | "Reviewed" | "Developing" | "Staging" | "Production";
+
+export interface Suggestion {
+  id: number;
+  user_id: number;
+  username: string;
+  title: string;
+  description: string;
+  is_anonymous: number;
+  status: SuggestionStatus;
+  created_at: string;
+  vote_count: number;
+  user_voted: number;
+}
+
+export async function getSuggestions(viewerUserId: number): Promise<Suggestion[]> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `
+      SELECT s.id, s.user_id, u.username, s.title, s.description, s.is_anonymous, s.status, s.created_at,
+        COUNT(DISTINCT sv.id) as vote_count,
+        MAX(CASE WHEN sv.user_id = ? THEN 1 ELSE 0 END) as user_voted
+      FROM suggestions s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN suggestion_votes sv ON sv.suggestion_id = s.id
+      GROUP BY s.id
+      ORDER BY vote_count DESC, s.created_at DESC
+    `,
+    args: [viewerUserId],
+  });
+  return result.rows as unknown as Suggestion[];
+}
+
+export async function getSuggestion(id: number): Promise<Suggestion | undefined> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `
+      SELECT s.id, s.user_id, u.username, s.title, s.description, s.is_anonymous, s.status, s.created_at,
+        COUNT(DISTINCT sv.id) as vote_count, 0 as user_voted
+      FROM suggestions s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN suggestion_votes sv ON sv.suggestion_id = s.id
+      WHERE s.id = ?
+      GROUP BY s.id
+    `,
+    args: [id],
+  });
+  return (result.rows[0] as unknown as Suggestion) || undefined;
+}
+
+export async function createSuggestion(userId: number, username: string, title: string, description: string, isAnonymous: boolean): Promise<number> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "INSERT INTO suggestions (user_id, title, description, is_anonymous) VALUES (?, ?, ?, ?)",
+    args: [userId, title, description, isAnonymous ? 1 : 0],
+  });
+  const suggestionId = Number(result.lastInsertRowid);
+  await db.execute({
+    sql: "INSERT INTO suggestion_status_history (suggestion_id, status, changed_by) VALUES (?, 'Submitted', ?)",
+    args: [suggestionId, username],
+  });
+  return suggestionId;
+}
+
+export async function updateSuggestionStatus(id: number, status: SuggestionStatus, changedBy: string, comment?: string): Promise<void> {
+  await ensureInit();
+  await db.execute({
+    sql: "UPDATE suggestions SET status = ? WHERE id = ?",
+    args: [status, id],
+  });
+  await db.execute({
+    sql: "INSERT INTO suggestion_status_history (suggestion_id, status, comment, changed_by) VALUES (?, ?, ?, ?)",
+    args: [id, status, comment?.trim() || null, changedBy],
+  });
+}
+
+export async function deleteSuggestion(id: number): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM suggestion_status_history WHERE suggestion_id = ?", args: [id] });
+  await db.execute({ sql: "DELETE FROM suggestion_votes WHERE suggestion_id = ?", args: [id] });
+  await db.execute({ sql: "DELETE FROM suggestions WHERE id = ?", args: [id] });
+}
+
+export interface StatusHistoryEntry {
+  id: number;
+  status: SuggestionStatus;
+  comment: string | null;
+  changed_by: string;
+  created_at: string;
+}
+
+export async function getStatusHistory(suggestionId: number): Promise<StatusHistoryEntry[]> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, status, comment, changed_by, created_at FROM suggestion_status_history WHERE suggestion_id = ? ORDER BY created_at ASC",
+    args: [suggestionId],
+  });
+  return result.rows as unknown as StatusHistoryEntry[];
+}
+
+export async function toggleSuggestionVote(suggestionId: number, userId: number): Promise<{ voted: boolean }> {
+  await ensureInit();
+  const existing = await db.execute({
+    sql: "SELECT id FROM suggestion_votes WHERE suggestion_id = ? AND user_id = ?",
+    args: [suggestionId, userId],
+  });
+  if (existing.rows.length > 0) {
+    await db.execute({
+      sql: "DELETE FROM suggestion_votes WHERE suggestion_id = ? AND user_id = ?",
+      args: [suggestionId, userId],
+    });
+    return { voted: false };
+  } else {
+    await db.execute({
+      sql: "INSERT INTO suggestion_votes (suggestion_id, user_id) VALUES (?, ?)",
+      args: [suggestionId, userId],
+    });
+    return { voted: true };
+  }
 }

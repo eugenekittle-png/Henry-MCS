@@ -187,8 +187,8 @@ export default function AuditPage() {
                       {log.username ?? <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${ACTION_COLORS[log.action] ?? "bg-gray-100 text-gray-700"}`}>
-                        {ACTION_LABELS[log.action] ?? log.action}
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${ACTION_COLORS[log.action.toLowerCase()] ?? "bg-gray-100 text-gray-700"}`}>
+                        {ACTION_LABELS[log.action.toLowerCase()] ?? log.action}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-700 text-xs font-mono">
