@@ -120,10 +120,13 @@ async function ensureInit() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       suggestion_id INTEGER NOT NULL REFERENCES suggestions(id),
       user_id INTEGER NOT NULL REFERENCES users(id),
+      count INTEGER NOT NULL DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now')),
       UNIQUE(suggestion_id, user_id)
     )
   `);
+  // Migrate: add count column to existing suggestion_votes tables
+  try { await db.execute("ALTER TABLE suggestion_votes ADD COLUMN count INTEGER NOT NULL DEFAULT 1"); } catch { /* exists */ }
   await db.execute(`
     CREATE TABLE IF NOT EXISTS suggestion_status_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +134,40 @@ async function ensureInit() {
       status TEXT NOT NULL,
       comment TEXT,
       changed_by TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Matrix extraction templates (per-user)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS matrix_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      name TEXT NOT NULL,
+      description TEXT,
+      client_id INTEGER REFERENCES clients(id),
+      matter_id INTEGER REFERENCES matters(id),
+      client_number TEXT,
+      matter_number TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  // Migrate: add client/matter columns to existing matrix_templates tables
+  for (const stmt of [
+    "ALTER TABLE matrix_templates ADD COLUMN client_id INTEGER REFERENCES clients(id)",
+    "ALTER TABLE matrix_templates ADD COLUMN matter_id INTEGER REFERENCES matters(id)",
+    "ALTER TABLE matrix_templates ADD COLUMN client_number TEXT",
+    "ALTER TABLE matrix_templates ADD COLUMN matter_number TEXT",
+  ]) {
+    try { await db.execute(stmt); } catch { /* column already exists */ }
+  }
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS matrix_template_columns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL REFERENCES matrix_templates(id),
+      order_num INTEGER NOT NULL DEFAULT 0,
+      column_name TEXT NOT NULL,
+      instruction TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
@@ -785,6 +822,8 @@ export async function getAllMatters() {
 
 export type SuggestionStatus = "Submitted" | "Reviewed" | "Developing" | "Staging" | "Production";
 
+export const SUGGESTION_VOTE_LIMIT = 10;
+
 export interface Suggestion {
   id: number;
   user_id: number;
@@ -795,7 +834,7 @@ export interface Suggestion {
   status: SuggestionStatus;
   created_at: string;
   vote_count: number;
-  user_voted: number;
+  user_vote_count: number;
 }
 
 export async function getSuggestions(viewerUserId: number): Promise<Suggestion[]> {
@@ -803,8 +842,8 @@ export async function getSuggestions(viewerUserId: number): Promise<Suggestion[]
   const result = await db.execute({
     sql: `
       SELECT s.id, s.user_id, u.username, s.title, s.description, s.is_anonymous, s.status, s.created_at,
-        COUNT(DISTINCT sv.id) as vote_count,
-        MAX(CASE WHEN sv.user_id = ? THEN 1 ELSE 0 END) as user_voted
+        COALESCE(SUM(sv.count), 0) as vote_count,
+        COALESCE(SUM(CASE WHEN sv.user_id = ? THEN sv.count ELSE 0 END), 0) as user_vote_count
       FROM suggestions s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN suggestion_votes sv ON sv.suggestion_id = s.id
@@ -814,6 +853,15 @@ export async function getSuggestions(viewerUserId: number): Promise<Suggestion[]
     args: [viewerUserId],
   });
   return result.rows as unknown as Suggestion[];
+}
+
+export async function getUserVotesUsed(userId: number): Promise<number> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT COALESCE(SUM(count), 0) as total FROM suggestion_votes WHERE user_id = ?",
+    args: [userId],
+  });
+  return result.rows[0].total as number;
 }
 
 export async function getSuggestion(id: number): Promise<Suggestion | undefined> {
@@ -883,23 +931,235 @@ export async function getStatusHistory(suggestionId: number): Promise<StatusHist
   return result.rows as unknown as StatusHistoryEntry[];
 }
 
-export async function toggleSuggestionVote(suggestionId: number, userId: number): Promise<{ voted: boolean }> {
+// ── Matrix templates ──────────────────────────────────────────────────────────
+
+export interface MatrixTemplate {
+  id: number;
+  user_id: number;
+  name: string;
+  description: string | null;
+  client_id: number | null;
+  matter_id: number | null;
+  client_number: string | null;
+  matter_number: string | null;
+  created_at: string;
+  column_count: number;
+}
+
+export interface MatrixTemplateColumn {
+  id: number;
+  template_id: number;
+  order_num: number;
+  column_name: string;
+  instruction: string | null;
+  created_at: string;
+}
+
+export async function getMatrixTemplates(userId: number, clientNumber?: string, matterNumber?: string): Promise<MatrixTemplate[]> {
   await ensureInit();
+  const conditions = ["t.user_id = ?"];
+  const args: (string | number)[] = [userId];
+  if (clientNumber) { conditions.push("t.client_number = ?"); args.push(clientNumber); }
+  if (matterNumber) { conditions.push("t.matter_number = ?"); args.push(matterNumber); }
+  const result = await db.execute({
+    sql: `SELECT t.id, t.user_id, t.name, t.description,
+            t.client_id, t.matter_id, t.client_number, t.matter_number, t.created_at,
+            COUNT(c.id) as column_count
+          FROM matrix_templates t
+          LEFT JOIN matrix_template_columns c ON c.template_id = t.id
+          WHERE ${conditions.join(" AND ")}
+          GROUP BY t.id
+          ORDER BY t.created_at DESC`,
+    args,
+  });
+  return result.rows as unknown as MatrixTemplate[];
+}
+
+export async function getMatrixTemplate(id: number, userId: number): Promise<MatrixTemplate | undefined> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `SELECT t.id, t.user_id, t.name, t.description,
+            t.client_id, t.matter_id, t.client_number, t.matter_number, t.created_at,
+            COUNT(c.id) as column_count
+          FROM matrix_templates t
+          LEFT JOIN matrix_template_columns c ON c.template_id = t.id
+          WHERE t.id = ? AND t.user_id = ?
+          GROUP BY t.id`,
+    args: [id, userId],
+  });
+  return (result.rows[0] as unknown as MatrixTemplate) || undefined;
+}
+
+export async function createMatrixTemplate(
+  userId: number, name: string, description: string,
+  clientId: number, matterId: number, clientNumber: string, matterNumber: string
+): Promise<number> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "INSERT INTO matrix_templates (user_id, name, description, client_id, matter_id, client_number, matter_number) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    args: [userId, name, description || null, clientId, matterId, clientNumber, matterNumber],
+  });
+  return Number(result.lastInsertRowid);
+}
+
+export async function updateMatrixTemplate(id: number, userId: number, name: string, description: string): Promise<void> {
+  await ensureInit();
+  await db.execute({
+    sql: "UPDATE matrix_templates SET name = ?, description = ? WHERE id = ? AND user_id = ?",
+    args: [name, description || null, id, userId],
+  });
+}
+
+export async function deleteMatrixTemplate(id: number, userId: number): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM matrix_template_columns WHERE template_id = ?", args: [id] });
+  await db.execute({ sql: "DELETE FROM matrix_templates WHERE id = ? AND user_id = ?", args: [id, userId] });
+}
+
+export async function copyMatrixTemplate(
+  sourceId: number, userId: number,
+  newName: string,
+  clientId: number, matterId: number, clientNumber: string, matterNumber: string
+): Promise<number> {
+  await ensureInit();
+  const newResult = await db.execute({
+    sql: "INSERT INTO matrix_templates (user_id, name, description, client_id, matter_id, client_number, matter_number) SELECT ?, ?, description, ?, ?, ?, ? FROM matrix_templates WHERE id = ? AND user_id = ?",
+    args: [userId, newName, clientId, matterId, clientNumber, matterNumber, sourceId, userId],
+  });
+  const newId = Number(newResult.lastInsertRowid);
+  // Copy all columns
+  const cols = await getMatrixTemplateColumns(sourceId);
+  for (const col of cols) {
+    await db.execute({
+      sql: "INSERT INTO matrix_template_columns (template_id, order_num, column_name, instruction) VALUES (?, ?, ?, ?)",
+      args: [newId, col.order_num, col.column_name, col.instruction ?? null],
+    });
+  }
+  return newId;
+}
+
+export async function getMatrixTemplateColumns(templateId: number): Promise<MatrixTemplateColumn[]> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, template_id, order_num, column_name, instruction, created_at FROM matrix_template_columns WHERE template_id = ? ORDER BY order_num, id",
+    args: [templateId],
+  });
+  return result.rows as unknown as MatrixTemplateColumn[];
+}
+
+export async function addMatrixTemplateColumn(templateId: number, columnName: string, instruction: string): Promise<MatrixTemplateColumn> {
+  await ensureInit();
+  const maxResult = await db.execute({
+    sql: "SELECT COALESCE(MAX(order_num), -1) as max_order FROM matrix_template_columns WHERE template_id = ?",
+    args: [templateId],
+  });
+  const nextOrder = (maxResult.rows[0].max_order as number) + 1;
+  const result = await db.execute({
+    sql: "INSERT INTO matrix_template_columns (template_id, order_num, column_name, instruction) VALUES (?, ?, ?, ?)",
+    args: [templateId, nextOrder, columnName, instruction || null],
+  });
+  const id = Number(result.lastInsertRowid);
+  const row = await db.execute({ sql: "SELECT id, template_id, order_num, column_name, instruction, created_at FROM matrix_template_columns WHERE id = ?", args: [id] });
+  return row.rows[0] as unknown as MatrixTemplateColumn;
+}
+
+export async function updateMatrixTemplateColumn(id: number, templateId: number, columnName: string, instruction: string): Promise<void> {
+  await ensureInit();
+  await db.execute({
+    sql: "UPDATE matrix_template_columns SET column_name = ?, instruction = ? WHERE id = ? AND template_id = ?",
+    args: [columnName, instruction || null, id, templateId],
+  });
+}
+
+export async function deleteMatrixTemplateColumn(id: number, templateId: number): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM matrix_template_columns WHERE id = ? AND template_id = ?", args: [id, templateId] });
+}
+
+export async function reorderMatrixTemplateColumns(templateId: number, orderedIds: number[]): Promise<void> {
+  await ensureInit();
+  for (let i = 0; i < orderedIds.length; i++) {
+    await db.execute({
+      sql: "UPDATE matrix_template_columns SET order_num = ? WHERE id = ? AND template_id = ?",
+      args: [i, orderedIds[i], templateId],
+    });
+  }
+}
+
+export async function adjustSuggestionVote(
+  suggestionId: number,
+  userId: number,
+  action: "add" | "remove"
+): Promise<{ voteCount: number; userVoteCount: number; userVotesUsed: number; error?: string }> {
+  await ensureInit();
+
   const existing = await db.execute({
-    sql: "SELECT id FROM suggestion_votes WHERE suggestion_id = ? AND user_id = ?",
+    sql: "SELECT count FROM suggestion_votes WHERE suggestion_id = ? AND user_id = ?",
     args: [suggestionId, userId],
   });
-  if (existing.rows.length > 0) {
-    await db.execute({
-      sql: "DELETE FROM suggestion_votes WHERE suggestion_id = ? AND user_id = ?",
-      args: [suggestionId, userId],
-    });
-    return { voted: false };
+  const currentUserCount = existing.rows.length > 0 ? (existing.rows[0].count as number) : 0;
+
+  if (action === "add") {
+    const totalUsed = await getUserVotesUsed(userId);
+    if (totalUsed >= SUGGESTION_VOTE_LIMIT) {
+      // Return current state without modifying
+      const totals = await db.execute({
+        sql: "SELECT COALESCE(SUM(count), 0) as total FROM suggestion_votes WHERE suggestion_id = ?",
+        args: [suggestionId],
+      });
+      return {
+        voteCount: totals.rows[0].total as number,
+        userVoteCount: currentUserCount,
+        userVotesUsed: totalUsed,
+        error: `You have used all ${SUGGESTION_VOTE_LIMIT} votes`,
+      };
+    }
+    if (existing.rows.length > 0) {
+      await db.execute({
+        sql: "UPDATE suggestion_votes SET count = count + 1 WHERE suggestion_id = ? AND user_id = ?",
+        args: [suggestionId, userId],
+      });
+    } else {
+      await db.execute({
+        sql: "INSERT INTO suggestion_votes (suggestion_id, user_id, count) VALUES (?, ?, 1)",
+        args: [suggestionId, userId],
+      });
+    }
   } else {
-    await db.execute({
-      sql: "INSERT INTO suggestion_votes (suggestion_id, user_id) VALUES (?, ?)",
-      args: [suggestionId, userId],
-    });
-    return { voted: true };
+    if (currentUserCount <= 0) {
+      const totals = await db.execute({
+        sql: "SELECT COALESCE(SUM(count), 0) as total FROM suggestion_votes WHERE suggestion_id = ?",
+        args: [suggestionId],
+      });
+      return { voteCount: totals.rows[0].total as number, userVoteCount: 0, userVotesUsed: await getUserVotesUsed(userId) };
+    }
+    if (currentUserCount === 1) {
+      await db.execute({
+        sql: "DELETE FROM suggestion_votes WHERE suggestion_id = ? AND user_id = ?",
+        args: [suggestionId, userId],
+      });
+    } else {
+      await db.execute({
+        sql: "UPDATE suggestion_votes SET count = count - 1 WHERE suggestion_id = ? AND user_id = ?",
+        args: [suggestionId, userId],
+      });
+    }
   }
+
+  const newTotals = await db.execute({
+    sql: "SELECT COALESCE(SUM(count), 0) as total FROM suggestion_votes WHERE suggestion_id = ?",
+    args: [suggestionId],
+  });
+  const newUserRow = await db.execute({
+    sql: "SELECT COALESCE(count, 0) as count FROM suggestion_votes WHERE suggestion_id = ? AND user_id = ?",
+    args: [suggestionId, userId],
+  });
+  const newUserCount = newUserRow.rows.length > 0 ? (newUserRow.rows[0].count as number) : 0;
+  const newTotalUsed = await getUserVotesUsed(userId);
+
+  return {
+    voteCount: newTotals.rows[0].total as number,
+    userVoteCount: newUserCount,
+    userVotesUsed: newTotalUsed,
+  };
 }

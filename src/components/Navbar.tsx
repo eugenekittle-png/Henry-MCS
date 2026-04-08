@@ -25,7 +25,7 @@ export default function Navbar() {
 
   const linkClass = (path: string) =>
     `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-      pathname === path
+      pathname === path || (path !== "/" && pathname.startsWith(path))
         ? "bg-white text-gray-900 shadow-sm"
         : "text-gray-300 hover:text-white hover:bg-white/10"
     }`;
@@ -60,6 +60,9 @@ export default function Navbar() {
           </Link>
           <Link href="/compare" className={linkClass("/compare")}>
             Compare
+          </Link>
+          <Link href="/matrix" className={linkClass("/matrix")}>
+            Matrix
           </Link>
 {user.role === "admin" && (
             <>

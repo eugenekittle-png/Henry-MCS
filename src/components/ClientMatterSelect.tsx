@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { Client, Matter } from "@/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -8,23 +8,35 @@ import type { Client, Matter } from "@/types";
 interface ClientMatterSelectProps {
   onSelect: (client: Client, matter: Matter) => void;
   onClear: () => void;
+  initialClient?: Client;
+  initialMatter?: Matter;
 }
 
 export default function ClientMatterSelect({
   onSelect,
   onClear,
+  initialClient,
+  initialMatter,
 }: ClientMatterSelectProps) {
   const [clientSearch, setClientSearch] = useState("");
   const [clientResults, setClientResults] = useState<Client[]>([]);
   const [clientLoading, setClientLoading] = useState(false);
   const [showClientResults, setShowClientResults] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(initialClient ?? null);
 
   const [matterSearch, setMatterSearch] = useState("");
   const [matterResults, setMatterResults] = useState<Matter[]>([]);
   const [matterLoading, setMatterLoading] = useState(false);
   const [showMatterResults, setShowMatterResults] = useState(false);
-  const [selectedMatter, setSelectedMatter] = useState<Matter | null>(null);
+  const [selectedMatter, setSelectedMatter] = useState<Matter | null>(initialMatter ?? null);
+
+  // Fire onSelect once on mount if initial values are provided
+  useEffect(() => {
+    if (initialClient && initialMatter) {
+      onSelect(initialClient, initialMatter);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const clientTimer = useRef<any>(null);
   const matterTimer = useRef<any>(null);
