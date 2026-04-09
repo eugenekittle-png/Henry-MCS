@@ -10,7 +10,7 @@ import attorneys2Img from "@/images/attorneys-2.jpeg";
 const faqs = [
   {
     q: "What is Henry MCS?",
-    a: "Henry MCS is an AI-powered document analysis platform built for law firm workflows. It helps attorneys and staff quickly summarize, compare, catalog, and interrogate legal documents using state-of-the-art language models.",
+    a: "Henry MCS is an AI-powered document analysis platform built for law firm workflows. It helps attorneys and staff quickly assist, break down, compare, and extract structured data from legal documents using state-of-the-art language models.",
   },
   {
     q: "What document types are supported?",
@@ -58,7 +58,7 @@ function LandingPage() {
             AI-Powered Document Analysis<br className="hidden sm:block" /> for Law Firms
           </h1>
           <p className="text-lg text-gray-200 mb-8 max-w-xl mx-auto">
-            Summarize, compare, catalog, and interrogate your legal documents in seconds.
+            Assist, break down, compare, and extract from your legal documents in seconds.
           </p>
           <Link
             href="/login"
@@ -96,6 +96,12 @@ function LandingPage() {
               title: "Compare",
               desc: "Side-by-side AI comparison of two documents with a detailed changes report.",
               icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
+            },
+            {
+              color: "orange",
+              title: "Matrix",
+              desc: "Build extraction templates and pull structured data from multiple documents in one pass.",
+              icon: "M3 10h18M3 14h18M10 3v18M14 3v18M3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z",
             },
           ].map(({ color, title, desc, icon }) => (
             <div
@@ -215,10 +221,10 @@ function Dashboard() {
     <div className="max-w-4xl mx-auto px-4 py-16">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-3">Document Analysis Tools</h1>
-        <p className="text-lg text-gray-600">AI-powered tools to summarize and catalog your documents</p>
+        <p className="text-lg text-gray-600">AI-powered tools to assist, break down, compare, and extract from your documents</p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Link
           href="/assist"
           className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-indigo-300 transition-all"
@@ -265,6 +271,22 @@ function Dashboard() {
             Upload two documents and get a detailed AI-generated comparison highlighting similarities, differences, and key changes.
           </p>
           <p className="text-sm text-gray-400 mt-4">Supports PDF, DOC, DOCX</p>
+        </Link>
+
+        <Link
+          href="/matrix"
+          className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-orange-300 transition-all"
+        >
+          <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-200 transition-colors">
+            <svg className="w-6 h-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M10 3v18M14 3v18M3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Matrix</h2>
+          <p className="text-gray-600">
+            Build custom extraction templates with defined columns and extract structured data from multiple documents at once.
+          </p>
+          <p className="text-sm text-gray-400 mt-4">Supports PDF, DOCX, TXT and more</p>
         </Link>
       </div>
     </div>

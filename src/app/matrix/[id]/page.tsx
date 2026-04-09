@@ -382,8 +382,12 @@ export default function MatrixTemplatePage() {
                 value={addName}
                 onChange={(e) => setAddName(e.target.value)}
                 placeholder="e.g. Governing Law"
+                maxLength={100}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
               />
+              {addName.length > 80 && (
+                <p className="text-xs text-right mt-0.5 text-gray-400">{100 - addName.length} characters remaining</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -394,8 +398,12 @@ export default function MatrixTemplatePage() {
                 onChange={(e) => setAddInstruction(e.target.value)}
                 placeholder="What should be extracted? Leave blank if self-explanatory."
                 rows={2}
+                maxLength={500}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 resize-none"
               />
+              {addInstruction.length > 480 && (
+                <p className="text-xs text-right mt-0.5 text-gray-400">{500 - addInstruction.length} characters remaining</p>
+              )}
             </div>
           </div>
           <div className="flex gap-2 mt-3">
@@ -433,17 +441,26 @@ export default function MatrixTemplatePage() {
                         autoFocus
                         value={editing.column_name}
                         onChange={(e) => setEditing({ ...editing, column_name: e.target.value })}
+                        maxLength={100}
                         className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
                       />
+                      {editing.column_name.length > 80 && (
+                        <p className="text-xs text-right mt-0.5 text-gray-400">{100 - editing.column_name.length} characters remaining</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Instruction <span className="text-gray-400 font-normal">(optional)</span></label>
-                      <input
+                      <textarea
                         value={editing.instruction}
                         onChange={(e) => setEditing({ ...editing, instruction: e.target.value })}
                         placeholder="Leave blank if self-explanatory"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                        rows={3}
+                        maxLength={500}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 resize-none"
                       />
+                      {editing.instruction.length > 480 && (
+                        <p className="text-xs text-right mt-0.5 text-gray-400">{500 - editing.instruction.length} characters remaining</p>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-2">

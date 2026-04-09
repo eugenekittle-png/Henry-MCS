@@ -256,7 +256,7 @@ export default function BreakdownPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold text-gray-900">Document Breakdown</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Breakdown</h1>
         {(hasResults || manifest) && (
           <button
             onClick={handleReset}

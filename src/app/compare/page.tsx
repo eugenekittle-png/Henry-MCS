@@ -118,7 +118,7 @@ export default function ComparePage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold text-gray-900">Document Compare</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Compare</h1>
         {hasResults && (
           <button
             onClick={handleReset}
