@@ -3,6 +3,21 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/components/AuthContext";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface MatrixTemplate {
   id: number;
@@ -146,13 +161,16 @@ export default function MatrixTemplatePage() {
     setDeleteConfirm(null);
   }
 
-  async function handleMove(index: number, direction: "up" | "down") {
-    const newCols = [...columns];
-    const swapWith = direction === "up" ? index - 1 : index + 1;
-    if (swapWith < 0 || swapWith >= newCols.length) return;
-    [newCols[index], newCols[swapWith]] = [newCols[swapWith], newCols[index]];
+  const sensors = useSensors(useSensor(PointerSensor));
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = columns.findIndex((c) => c.id === Number(active.id));
+    const newIndex = columns.findIndex((c) => c.id === Number(over.id));
+    const newCols = arrayMove(columns, oldIndex, newIndex);
     setColumns(newCols);
-    await fetch(`/api/matrix/templates/${templateId}/columns/${newCols[0].id}`, {
+    await fetch(`/api/matrix/templates/${templateId}/columns/reorder`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orderedIds: newCols.map((c) => c.id) }),
@@ -218,6 +236,97 @@ export default function MatrixTemplatePage() {
 
   if (!user) return null;
 
+  // Extracted to keep JSX clean
+  function SortableRow({ col, index }: { col: MatrixTemplateColumn; index: number }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: col.id });
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+      <div ref={setNodeRef} style={style} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        {editing?.id === col.id ? (
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Column Name</label>
+                <input
+                  autoFocus
+                  value={editing.column_name}
+                  onChange={(e) => setEditing({ ...editing, column_name: e.target.value })}
+                  maxLength={100}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                />
+                {editing.column_name.length > 80 && (
+                  <p className="text-xs text-right mt-0.5 text-gray-400">{100 - editing.column_name.length} characters remaining</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Instruction <span className="text-gray-400 font-normal">(optional)</span></label>
+                <textarea
+                  value={editing.instruction}
+                  onChange={(e) => setEditing({ ...editing, instruction: e.target.value })}
+                  placeholder="Leave blank if self-explanatory"
+                  rows={3}
+                  maxLength={500}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 resize-none"
+                />
+                {editing.instruction.length > 480 && (
+                  <p className="text-xs text-right mt-0.5 text-gray-400">{500 - editing.instruction.length} characters remaining</p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleEditSave} disabled={editSaving} className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50">
+                {editSaving ? "Saving…" : "Save"}
+              </button>
+              <button onClick={() => setEditing(null)} className="px-3 py-1 text-xs text-gray-600 hover:text-gray-900">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-[2rem_1fr_2fr_5rem] gap-3 items-center px-4 py-3">
+            <button
+              {...attributes}
+              {...listeners}
+              className="flex flex-col items-center justify-center gap-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors touch-none"
+              title="Drag to reorder"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="5" cy="4" r="1.2" />
+                <circle cx="11" cy="4" r="1.2" />
+                <circle cx="5" cy="8" r="1.2" />
+                <circle cx="11" cy="8" r="1.2" />
+                <circle cx="5" cy="12" r="1.2" />
+                <circle cx="11" cy="12" r="1.2" />
+              </svg>
+              <span className="text-xs text-gray-300 leading-none">{index + 1}</span>
+            </button>
+            <p className="text-sm font-medium text-gray-900">{col.column_name}</p>
+            <p className="text-sm text-gray-500 truncate">{col.instruction || <span className="text-gray-300 italic">None</span>}</p>
+            <div className="flex items-center justify-end gap-1">
+              <button onClick={() => setEditing({ id: col.id, column_name: col.column_name, instruction: col.instruction ?? "" })} className="p-1.5 text-gray-400 hover:text-gray-600 rounded transition-colors" title="Edit">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+              </button>
+              <button onClick={() => setDeleteConfirm(col.id)} className="p-1.5 text-gray-300 hover:text-red-500 rounded transition-colors" title="Delete">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {deleteConfirm === col.id && (
+          <div className="px-4 py-3 bg-red-50 border-t border-red-100 flex items-center gap-3">
+            <p className="text-sm text-gray-700 flex-1">Remove <strong>{col.column_name}</strong>?</p>
+            <button onClick={() => handleDelete(col.id)} className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700">Remove</button>
+            <button onClick={() => setDeleteConfirm(null)} className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-8">
@@ -241,7 +350,7 @@ export default function MatrixTemplatePage() {
       {/* Back */}
       <button
         onClick={() => router.push("/matrix")}
-        className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors"
+        className="flex items-center gap-1 text-sm font-semibold text-gray-700 hover:text-gray-900 mb-6 transition-colors"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -429,80 +538,13 @@ export default function MatrixTemplatePage() {
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Instruction</span>
             <span />
           </div>
-
-          {columns.map((col, index) => (
-            <div key={col.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-              {editing?.id === col.id ? (
-                <div className="p-4 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Column Name</label>
-                      <input
-                        autoFocus
-                        value={editing.column_name}
-                        onChange={(e) => setEditing({ ...editing, column_name: e.target.value })}
-                        maxLength={100}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-                      />
-                      {editing.column_name.length > 80 && (
-                        <p className="text-xs text-right mt-0.5 text-gray-400">{100 - editing.column_name.length} characters remaining</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Instruction <span className="text-gray-400 font-normal">(optional)</span></label>
-                      <textarea
-                        value={editing.instruction}
-                        onChange={(e) => setEditing({ ...editing, instruction: e.target.value })}
-                        placeholder="Leave blank if self-explanatory"
-                        rows={3}
-                        maxLength={500}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 resize-none"
-                      />
-                      {editing.instruction.length > 480 && (
-                        <p className="text-xs text-right mt-0.5 text-gray-400">{500 - editing.instruction.length} characters remaining</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={handleEditSave} disabled={editSaving} className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 disabled:opacity-50">
-                      {editSaving ? "Saving…" : "Save"}
-                    </button>
-                    <button onClick={() => setEditing(null)} className="px-3 py-1 text-xs text-gray-600 hover:text-gray-900">Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-[2rem_1fr_2fr_5rem] gap-3 items-center px-4 py-3">
-                  <div className="flex flex-col items-center gap-0.5">
-                    <button onClick={() => handleMove(index, "up")} disabled={index === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors" title="Move up">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
-                    </button>
-                    <span className="text-xs text-gray-300 leading-none">{index + 1}</span>
-                    <button onClick={() => handleMove(index, "down")} disabled={index === columns.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors" title="Move down">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                    </button>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">{col.column_name}</p>
-                  <p className="text-sm text-gray-500 truncate">{col.instruction || <span className="text-gray-300 italic">None</span>}</p>
-                  <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => setEditing({ id: col.id, column_name: col.column_name, instruction: col.instruction ?? "" })} className="p-1.5 text-gray-400 hover:text-gray-600 rounded transition-colors" title="Edit">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                    </button>
-                    <button onClick={() => setDeleteConfirm(col.id)} className="p-1.5 text-gray-300 hover:text-red-500 rounded transition-colors" title="Delete">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {deleteConfirm === col.id && (
-                <div className="px-4 py-3 bg-red-50 border-t border-red-100 flex items-center gap-3">
-                  <p className="text-sm text-gray-700 flex-1">Remove <strong>{col.column_name}</strong>?</p>
-                  <button onClick={() => handleDelete(col.id)} className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700">Remove</button>
-                  <button onClick={() => setDeleteConfirm(null)} className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
-                </div>
-              )}
-            </div>
-          ))}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={columns.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+              {columns.map((col, index) => (
+                <SortableRow key={col.id} col={col} index={index} />
+              ))}
+            </SortableContext>
+          </DndContext>
         </div>
       )}
     </div>

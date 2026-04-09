@@ -46,6 +46,13 @@ async function ensureInit() {
     // column already exists
   }
 
+  // Migrate: add nav_pins column to users
+  try {
+    await db.execute(`ALTER TABLE users ADD COLUMN nav_pins TEXT NOT NULL DEFAULT '["assist"]'`);
+  } catch {
+    // column already exists
+  }
+
   // Create audit_logs table if missing
   await db.execute(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -1162,4 +1169,27 @@ export async function adjustSuggestionVote(
     userVoteCount: newUserCount,
     userVotesUsed: newTotalUsed,
   };
+}
+
+export async function getUserNavPins(userId: number): Promise<string[]> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `SELECT nav_pins FROM users WHERE id = ?`,
+    args: [userId],
+  });
+  const raw = result.rows[0]?.nav_pins as string | null;
+  try {
+    const parsed = JSON.parse(raw ?? '["assist"]');
+    return Array.isArray(parsed) ? parsed : ["assist"];
+  } catch {
+    return ["assist"];
+  }
+}
+
+export async function setUserNavPins(userId: number, pins: string[]): Promise<void> {
+  await ensureInit();
+  await db.execute({
+    sql: `UPDATE users SET nav_pins = ? WHERE id = ?`,
+    args: [JSON.stringify(pins), userId],
+  });
 }
