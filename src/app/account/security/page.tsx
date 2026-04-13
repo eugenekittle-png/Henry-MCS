@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/components/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type Step = "idle" | "qr" | "confirm" | "backup" | "disabling";
 
-export default function SecurityPage() {
+function SecurityPageInner() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -217,5 +217,13 @@ export default function SecurityPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SecurityPage() {
+  return (
+    <Suspense>
+      <SecurityPageInner />
+    </Suspense>
   );
 }
