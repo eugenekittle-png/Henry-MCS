@@ -21,12 +21,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!matter_number || !description) return Response.json({ error: "Matter number and description are required" }, { status: 400 });
 
     const updated = await updateMatter(matterId, matter_number, description);
-    await logAction({ username: session?.username ?? null, action: "Matter-Update", details: { matterId, matterNumber: matter_number, description }, success: true, ipAddress: ip });
+    await logAction({ username: session?.email ?? null, action: "Matter-Update", details: { matterId, matterNumber: matter_number, description }, success: true, ipAddress: ip });
     return Response.json(updated);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update matter";
     const status = message.includes("UNIQUE") ? 409 : 500;
-    await logAction({ username: session?.username ?? null, action: "Matter-Update", details: { error: message }, success: false, ipAddress: ip });
+    await logAction({ username: session?.email ?? null, action: "Matter-Update", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status });
   }
 }
@@ -45,6 +45,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!existing) return Response.json({ error: "Matter not found" }, { status: 404 });
 
   await deleteMatter(matterId);
-  await logAction({ username: session?.username ?? null, action: "Matter-Delete", details: { matterId, matterNumber: existing.matter_number, description: existing.description }, success: true, ipAddress: ip });
+  await logAction({ username: session?.email ?? null, action: "Matter-Delete", details: { matterId, matterNumber: existing.matter_number, description: existing.description }, success: true, ipAddress: ip });
   return Response.json({ success: true });
 }

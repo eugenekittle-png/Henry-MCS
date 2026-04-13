@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { Client } from "@/types";
+import { downloadCSV } from "@/lib/csv";
 
 interface MatterRow {
   id: number;
@@ -117,14 +118,27 @@ export default function MattersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Matters</h1>
           <p className="text-gray-600 text-sm mt-1">Manage matters across all clients.</p>
         </div>
-        {!showAdd && editingId === null && (
+        <div className="flex gap-2">
           <button
-            onClick={() => { setShowAdd(true); setForm({ client_id: "", matter_number: "", description: "" }); setError(null); }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            onClick={() => downloadCSV("matters.csv", matters, [
+              { key: "client_number", label: "Client Number" },
+              { key: "client_name", label: "Client Name" },
+              { key: "matter_number", label: "Matter Number" },
+              { key: "description", label: "Description" },
+            ])}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
           >
-            Add Matter
+            Download CSV
           </button>
-        )}
+          {!showAdd && editingId === null && (
+            <button
+              onClick={() => { setShowAdd(true); setForm({ client_id: "", matter_number: "", description: "" }); setError(null); }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              Add Matter
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (

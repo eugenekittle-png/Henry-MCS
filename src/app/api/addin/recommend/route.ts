@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
         }
 
         logAction({
-          username: session.username,
+          username: session.email,
           action: "Ask",
           clientNumber: clientNumber || null,
           matterNumber: matterNumber || null,
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session.username, action: "Recommend", details: { error: message, source: "word-addin" }, success: false, ipAddress: ip });
+    logAction({ username: session.email, action: "Recommend", details: { error: message, source: "word-addin" }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status: 500 });
   }
 }

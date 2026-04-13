@@ -8,6 +8,23 @@ const db = createClient({
 
 let initialized = false;
 
+// --- Principal ID generation ---
+
+function generatePrincipalId(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  const suffix = Array.from(bytes).map(b => chars[b % chars.length]).join("");
+  return `U-${suffix}`;
+}
+
+async function generateUniquePrincipalId(): Promise<string> {
+  while (true) {
+    const id = generatePrincipalId();
+    const existing = await db.execute({ sql: "SELECT id FROM users WHERE username = ?", args: [id] });
+    if (existing.rows.length === 0) return id;
+  }
+}
+
 async function ensureInit() {
   if (initialized) return;
   initialized = true;
@@ -52,6 +69,43 @@ async function ensureInit() {
   } catch {
     // column already exists
   }
+
+  // Migrate: add 2FA and email columns to users
+  for (const stmt of [
+    "ALTER TABLE users ADD COLUMN email TEXT",
+    "ALTER TABLE users ADD COLUMN totp_secret TEXT",
+    "ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN totp_backup_codes TEXT",
+  ]) {
+    try { await db.execute(stmt); } catch { /* already exists */ }
+  }
+
+  // Migrate: unique index on email
+  try { await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email) WHERE email IS NOT NULL"); } catch { /* exists */ }
+
+  // Migrate: add first_name and last_name columns
+  for (const stmt of [
+    "ALTER TABLE users ADD COLUMN first_name TEXT",
+    "ALTER TABLE users ADD COLUMN last_name TEXT",
+    "ALTER TABLE users ADD COLUMN last_login_at TEXT",
+  ]) {
+    try { await db.execute(stmt); } catch { /* already exists */ }
+  }
+
+  // Migrate: backfill Principal IDs for users that predate this format
+  const legacyUsers = await db.execute("SELECT id FROM users WHERE username NOT LIKE 'U-%'");
+  for (const row of legacyUsers.rows) {
+    const principalId = await generateUniquePrincipalId();
+    await db.execute({ sql: "UPDATE users SET username = ? WHERE id = ?", args: [principalId, row.id] });
+  }
+
+  // Create settings table for firm-wide config
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
 
   // Create audit_logs table if missing
   await db.execute(`
@@ -202,14 +256,16 @@ async function ensureInit() {
 async function seedUsers() {
   const adminHash = await hashPassword("Admin123!");
   const userHash = await hashPassword("User1234!");
+  const adminId = await generateUniquePrincipalId();
+  const userId = await generateUniquePrincipalId();
 
   await db.execute({
-    sql: "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-    args: ["admin", adminHash, "admin"],
+    sql: "INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)",
+    args: [adminId, "admin@henry-mcs.local", adminHash, "admin"],
   });
   await db.execute({
-    sql: "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-    args: ["user", userHash, "user"],
+    sql: "INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, ?)",
+    args: [userId, "user@henry-mcs.local", userHash, "user"],
   });
 }
 
@@ -476,57 +532,67 @@ export async function deleteMatter(id: number) {
   await db.execute({ sql: "DELETE FROM matters WHERE id = ?", args: [id] });
 }
 
-export async function getUserByUsername(username: string) {
+export async function getUserByEmail(email: string) {
   await ensureInit();
   const result = await db.execute({
-    sql: "SELECT id, username, password_hash, role, must_change_password, failed_login_attempts, locked_until FROM users WHERE LOWER(username) = LOWER(?)",
-    args: [username],
+    sql: "SELECT id, username, email, password_hash, role, must_change_password, failed_login_attempts, locked_until FROM users WHERE LOWER(email) = LOWER(?)",
+    args: [email],
   });
   if (!result.rows[0]) return undefined;
-  const row = result.rows[0] as unknown as { id: number; username: string; password_hash: string; role: "admin" | "user"; must_change_password: number; failed_login_attempts: number; locked_until: string | null };
+  const row = result.rows[0] as unknown as { id: number; username: string; email: string; password_hash: string; role: "admin" | "user"; must_change_password: number; failed_login_attempts: number; locked_until: string | null };
   return { ...row, must_change_password: !!row.must_change_password, failed_login_attempts: row.failed_login_attempts ?? 0 };
 }
 
-export async function incrementFailedLogins(username: string) {
+export async function incrementFailedLogins(userId: number) {
   await ensureInit();
-  // Increment count, and lock the account for 15 minutes once it reaches 5
   await db.execute({
     sql: `UPDATE users SET
             failed_login_attempts = failed_login_attempts + 1,
             locked_until = CASE WHEN failed_login_attempts + 1 >= 5 THEN datetime('now', '+15 minutes') ELSE locked_until END
-          WHERE LOWER(username) = LOWER(?)`,
-    args: [username],
+          WHERE id = ?`,
+    args: [userId],
   });
 }
 
-export async function resetFailedLogins(username: string) {
+export async function resetFailedLogins(userId: number) {
   await ensureInit();
   await db.execute({
-    sql: "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE LOWER(username) = LOWER(?)",
-    args: [username],
+    sql: "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?",
+    args: [userId],
+  });
+}
+
+export async function updateLastLogin(userId: number) {
+  await ensureInit();
+  await db.execute({
+    sql: "UPDATE users SET last_login_at = datetime('now') WHERE id = ?",
+    args: [userId],
   });
 }
 
 export async function getAllUsers() {
   await ensureInit();
-  const result = await db.execute("SELECT id, username, role, created_at, failed_login_attempts, locked_until FROM users ORDER BY username");
-  return result.rows as unknown as { id: number; username: string; role: "admin" | "user"; created_at: string; failed_login_attempts: number; locked_until: string | null }[];
+  const result = await db.execute("SELECT id, username, email, first_name, last_name, role, created_at, last_login_at, failed_login_attempts, locked_until, totp_enabled FROM users ORDER BY email");
+  return result.rows as unknown as { id: number; username: string; email: string; first_name: string | null; last_name: string | null; role: "admin" | "user"; created_at: string; last_login_at: string | null; failed_login_attempts: number; locked_until: string | null; totp_enabled: number }[];
 }
 
 export async function getUser(id: number) {
   await ensureInit();
   const result = await db.execute({
-    sql: "SELECT id, username, role FROM users WHERE id = ?",
+    sql: "SELECT id, username, email, first_name, last_name, role FROM users WHERE id = ?",
     args: [id],
   });
-  return (result.rows[0] as unknown as { id: number; username: string; role: "admin" | "user" }) || undefined;
+  return (result.rows[0] as unknown as { id: number; username: string; email: string; first_name: string | null; last_name: string | null; role: "admin" | "user" }) || undefined;
 }
 
-export async function dbCreateUser(username: string, passwordHash: string, role: "admin" | "user") {
+export async function dbCreateUser(email: string, passwordHash: string, role: "admin" | "user", firstName?: string, lastName?: string) {
   await ensureInit();
+  const existingEmail = await db.execute({ sql: "SELECT id FROM users WHERE LOWER(email) = LOWER(?)", args: [email] });
+  if (existingEmail.rows.length > 0) throw new Error("Email already in use");
+  const principalId = await generateUniquePrincipalId();
   const result = await db.execute({
-    sql: "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-    args: [username.toLowerCase(), passwordHash, role],
+    sql: "INSERT INTO users (username, email, first_name, last_name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)",
+    args: [principalId, email.toLowerCase(), firstName || null, lastName || null, passwordHash, role],
   });
   return getUser(Number(result.lastInsertRowid));
 }
@@ -1169,6 +1235,66 @@ export async function adjustSuggestionVote(
     userVoteCount: newUserCount,
     userVotesUsed: newTotalUsed,
   };
+}
+
+// --- Settings ---
+
+export async function getSetting(key: string): Promise<string | null> {
+  await ensureInit();
+  const result = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: [key] });
+  return result.rows[0]?.value as string | null ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [key, value] });
+}
+
+// --- 2FA ---
+
+export async function getUserForAuth(userId: number): Promise<{
+  id: number; username: string; role: string; email: string | null;
+  first_name: string | null; last_name: string | null;
+  password_hash: string;
+  totp_secret: string | null; totp_enabled: number; totp_backup_codes: string | null;
+  must_change_password: number;
+} | null> {
+  await ensureInit();
+  const result = await db.execute({ sql: "SELECT id, username, role, email, first_name, last_name, password_hash, totp_secret, totp_enabled, totp_backup_codes, must_change_password FROM users WHERE id = ?", args: [userId] });
+  if (!result.rows[0]) return null;
+  return result.rows[0] as never;
+}
+
+export async function setUserTotp(userId: number, secret: string, backupCodesJson: string): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "UPDATE users SET totp_secret = ?, totp_enabled = 1, totp_backup_codes = ? WHERE id = ?", args: [secret, backupCodesJson, userId] });
+}
+
+export async function disableUserTotp(userId: number): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "UPDATE users SET totp_secret = NULL, totp_enabled = 0, totp_backup_codes = NULL WHERE id = ?", args: [userId] });
+}
+
+export async function updateUserBackupCodes(userId: number, backupCodesJson: string): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "UPDATE users SET totp_backup_codes = ? WHERE id = ?", args: [backupCodesJson, userId] });
+}
+
+export async function updateUserEmail(userId: number, email: string | null): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "UPDATE users SET email = ? WHERE id = ?", args: [email, userId] });
+}
+
+export async function updateUserProfile(userId: number, fields: { first_name?: string | null; last_name?: string | null; email?: string | null }): Promise<void> {
+  await ensureInit();
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+  if ("first_name" in fields) { sets.push("first_name = ?"); args.push(fields.first_name ?? null); }
+  if ("last_name" in fields) { sets.push("last_name = ?"); args.push(fields.last_name ?? null); }
+  if ("email" in fields) { sets.push("email = ?"); args.push(fields.email ? fields.email.toLowerCase() : null); }
+  if (sets.length === 0) return;
+  args.push(userId);
+  await db.execute({ sql: `UPDATE users SET ${sets.join(", ")} WHERE id = ?`, args: args as import("@libsql/client").InArgs });
 }
 
 export async function getUserNavPins(userId: number): Promise<string[]> {

@@ -23,6 +23,6 @@ export async function POST(req: NextRequest) {
   if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
   if (!description?.trim()) return NextResponse.json({ error: "Description is required" }, { status: 400 });
 
-  const id = await createSuggestion(session.userId, session.username, title.trim(), description.trim(), !!isAnonymous);
+  const id = await createSuggestion(session.userId, session.email, title.trim(), description.trim(), !!isAnonymous);
   return NextResponse.json({ id }, { status: 201 });
 }

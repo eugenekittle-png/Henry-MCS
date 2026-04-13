@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
           controller.close();
         } finally {
           logAction({
-            username: session?.username ?? null,
+            username: session?.email ?? null,
             action: isWordAddin ? "Ask" : "Chat",
             clientNumber: isWordAddin ? (clientNumber || null) : null,
             matterNumber: isWordAddin ? (matterNumber || null) : null,
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session?.username ?? null, action: "Chat", details: { error: message }, success: false, ipAddress: ip });
+    logAction({ username: session?.email ?? null, action: "Chat", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, hashPassword } from "@/lib/auth";
-import { getAllUsers, dbCreateUser, getUserByUsername } from "@/lib/db";
+import { getAllUsers, dbCreateUser } from "@/lib/db";
 import { validatePassword } from "@/lib/password";
 import { logAction, getClientIp } from "@/lib/audit";
 
@@ -20,10 +20,13 @@ export async function POST(request: NextRequest) {
   }
 
   const ip = getClientIp(request);
-  const { username, password, role } = await request.json();
+  const { email, password, role, first_name, last_name } = await request.json();
 
-  if (!username || !password) {
-    return NextResponse.json({ error: "Username and password are required" }, { status: 400 });
+  if (!email || !password) {
+    return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
   }
   const pwError = validatePassword(password);
   if (pwError) {
@@ -33,13 +36,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Role must be 'admin' or 'user'" }, { status: 400 });
   }
 
-  const existing = await getUserByUsername(username.toLowerCase());
-  if (existing) {
-    return NextResponse.json({ error: "Username already exists" }, { status: 409 });
-  }
-
   const passwordHash = await hashPassword(password);
-  const user = await dbCreateUser(username, passwordHash, role);
-  await logAction({ username: session.username, action: "User-Create", details: { targetUser: username.toLowerCase(), role }, success: true, ipAddress: ip });
-  return NextResponse.json(user, { status: 201 });
+  try {
+    const user = await dbCreateUser(email, passwordHash, role, first_name?.trim() || undefined, last_name?.trim() || undefined);
+    await logAction({ username: session.email, action: "User-Create", details: { targetEmail: email.toLowerCase(), role }, success: true, ipAddress: ip });
+    return NextResponse.json(user, { status: 201 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to create user";
+    if (msg.includes("Email already in use")) return NextResponse.json({ error: "Email already in use" }, { status: 409 });
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

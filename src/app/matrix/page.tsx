@@ -226,7 +226,12 @@ export default function MatrixPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Matrix</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">Matrix</h1>
+            <a href="/help#matrix" title="Help" className="flex items-center justify-center w-6 h-6 rounded-full border border-gray-400 text-gray-500 hover:border-gray-600 hover:text-gray-700 transition-colors text-xs font-semibold">
+              ?
+            </a>
+          </div>
           <p className="text-sm text-gray-500 mt-1">Build extraction templates to pull structured data from documents</p>
         </div>
         <div className="flex items-center gap-2">

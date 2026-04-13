@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
+import { downloadCSV } from "@/lib/csv";
 
 interface UsageRow {
   label: string;
@@ -337,15 +338,56 @@ export default function MyUsagePage() {
             {username && <p className="text-gray-500 text-sm">{username}</p>}
           </div>
         </div>
-        <button
-          onClick={handleRefresh}
-          className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              if (groupBy === "log") {
+                downloadCSV("my-usage-log.csv", logRows.map(r => ({
+                  ...r,
+                  created_at: fmtDateTime(r.created_at),
+                  action: ACTION_LABELS[r.action.toLowerCase()] ?? r.action,
+                  cost: fmtCost(calcCost(r.tokens_input ?? 0, r.tokens_output ?? 0)),
+                  success: r.success ? "OK" : "Failed",
+                })), [
+                  { key: "created_at", label: "Date & Time" },
+                  { key: "action", label: "Action" },
+                  { key: "client_number", label: "Client" },
+                  { key: "matter_number", label: "Matter" },
+                  { key: "tokens_input", label: "In Tokens" },
+                  { key: "tokens_output", label: "Out Tokens" },
+                  { key: "cost", label: "Cost" },
+                  { key: "success", label: "Status" },
+                ]);
+              } else {
+                downloadCSV(`my-usage-by-${groupBy}.csv`, rows.map(r => ({
+                  label: displayLabel(r),
+                  total_requests: r.total_requests,
+                  total_input: r.total_input,
+                  total_output: r.total_output,
+                  cost: fmtCost(calcCost(r.total_input, r.total_output)),
+                })), [
+                  { key: "label", label: groupBy === "action" ? "Action" : groupBy === "client" ? "Client" : "Client / Matter" },
+                  { key: "total_requests", label: "Requests" },
+                  { key: "total_input", label: "Input Tokens" },
+                  { key: "total_output", label: "Output Tokens" },
+                  { key: "cost", label: "Est. Cost" },
+                ]);
+              }
+            }}
+            className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          >
+            Download CSV
+          </button>
+          <button
+            onClick={handleRefresh}
+            className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}

@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  await updateSuggestionStatus(Number(id), status, session.username, comment);
+  await updateSuggestionStatus(Number(id), status, session.email, comment);
   return NextResponse.json({ ok: true });
 }
 

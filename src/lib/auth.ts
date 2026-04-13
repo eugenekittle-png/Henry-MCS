@@ -8,7 +8,8 @@ export type UserRole = "admin" | "user";
 
 export interface SessionPayload {
   userId: number;
-  username: string;
+  username: string; // Principal ID (U-XXXXXX)
+  email: string;
   role: UserRole;
   mustChangePassword: boolean;
   exp: number;
@@ -114,4 +115,70 @@ export async function getSession(): Promise<SessionPayload | null> {
 export async function clearSessionCookie() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+}
+
+// --- Pending 2FA cookies ---
+
+const PENDING_2FA_COOKIE = "henry_pending_2fa";
+const PENDING_SETUP_COOKIE = "henry_pending_setup";
+const PENDING_MAX_AGE = 60 * 10; // 10 minutes
+
+export async function setPending2faCookie(userId: number): Promise<void> {
+  const payload = { userId, exp: Date.now() + PENDING_MAX_AGE * 1000 };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const key = await getKey(AUTH_SECRET);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(encoded));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  const token = `${encoded}.${sigHex}`;
+  const cookieStore = await cookies();
+  cookieStore.set(PENDING_2FA_COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: PENDING_MAX_AGE, path: "/" });
+}
+
+export async function setPendingSetupCookie(userId: number): Promise<void> {
+  const payload = { userId, exp: Date.now() + 60 * 30 * 1000 }; // 30 min to complete setup
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const key = await getKey(AUTH_SECRET);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(encoded));
+  const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  const token = `${encoded}.${sigHex}`;
+  const cookieStore = await cookies();
+  cookieStore.set(PENDING_SETUP_COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 60 * 30, path: "/" });
+}
+
+async function verifyPendingToken(token: string): Promise<{ userId: number } | null> {
+  const [encoded, sigHex] = token.split(".");
+  if (!encoded || !sigHex) return null;
+  try {
+    const key = await getKey(AUTH_SECRET);
+    const sig = new Uint8Array(sigHex.match(/.{2}/g)!.map(h => parseInt(h, 16)));
+    const valid = await crypto.subtle.verify("HMAC", key, sig, new TextEncoder().encode(encoded));
+    if (!valid) return null;
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString());
+    if (payload.exp < Date.now()) return null;
+    return { userId: payload.userId };
+  } catch {
+    return null;
+  }
+}
+
+export async function getPending2faUserId(): Promise<number | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(PENDING_2FA_COOKIE)?.value;
+  if (!token) return null;
+  const payload = await verifyPendingToken(token);
+  return payload?.userId ?? null;
+}
+
+export async function getPendingSetupUserId(): Promise<number | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(PENDING_SETUP_COOKIE)?.value;
+  if (!token) return null;
+  const payload = await verifyPendingToken(token);
+  return payload?.userId ?? null;
+}
+
+export async function clearPendingCookies(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.delete(PENDING_2FA_COOKIE);
+  cookieStore.delete(PENDING_SETUP_COOKIE);
 }

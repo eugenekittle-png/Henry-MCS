@@ -54,7 +54,7 @@ export default function ChangePasswordPage() {
       if (meRes.ok) {
         const meData = await meRes.json();
         if (meData.user) {
-          login(meData.user.username, meData.user.role);
+          login(meData.user.username, meData.user.email ?? "", meData.user.role);
         }
       }
 

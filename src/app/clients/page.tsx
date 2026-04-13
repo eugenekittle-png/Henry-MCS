@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { Client } from "@/types";
+import { downloadCSV } from "@/lib/csv";
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -104,14 +105,25 @@ export default function ClientsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
           <p className="text-gray-600 text-sm mt-1">Manage your client records.</p>
         </div>
-        {!showAdd && editingId === null && (
+        <div className="flex gap-2">
           <button
-            onClick={() => { setShowAdd(true); setForm({ client_number: "", name: "" }); setError(null); }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            onClick={() => downloadCSV("clients.csv", clients, [
+              { key: "client_number", label: "Client Number" },
+              { key: "name", label: "Name" },
+            ])}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
           >
-            Add Client
+            Download CSV
           </button>
-        )}
+          {!showAdd && editingId === null && (
+            <button
+              onClick={() => { setShowAdd(true); setForm({ client_number: "", name: "" }); setError(null); }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              Add Client
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (

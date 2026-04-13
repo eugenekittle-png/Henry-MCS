@@ -25,12 +25,12 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "Client number and name are required" }, { status: 400 });
     }
     const client = await dbCreateClient(client_number, name);
-    await logAction({ username: session?.username ?? null, action: "Client-Create", details: { clientNumber: client_number, name }, success: true, ipAddress: ip });
+    await logAction({ username: session?.email ?? null, action: "Client-Create", details: { clientNumber: client_number, name }, success: true, ipAddress: ip });
     return Response.json(client, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create client";
     const status = message.includes("UNIQUE") ? 409 : 500;
-    await logAction({ username: session?.username ?? null, action: "Client-Create", details: { error: message }, success: false, ipAddress: ip });
+    await logAction({ username: session?.email ?? null, action: "Client-Create", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status });
   }
 }

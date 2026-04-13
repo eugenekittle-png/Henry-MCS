@@ -5,16 +5,44 @@ const PUBLIC_PATHS = ["/", "/login", "/api/auth/login", "/api/auth/me", "/word-a
 const CHANGE_PW_PATHS = ["/change-password", "/api/auth/change-password", "/api/auth/logout"];
 const ADMIN_PATHS = ["/clients", "/matters", "/users", "/audit", "/usage", "/api/users", "/api/audit", "/api/usage", "/playbooks"];
 
+const PENDING_2FA_COOKIE = "henry_pending_2fa";
+const PENDING_SETUP_COOKIE = "henry_pending_setup";
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths, static assets, Next.js internals
+  // Allow static assets and Next.js internals
   if (
-    PUBLIC_PATHS.some(p => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname.endsWith(".ico")
   ) {
+    return NextResponse.next();
+  }
+
+  // Allow all auth API routes and login pages to pass through
+  if (
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/login")
+  ) {
+    return NextResponse.next();
+  }
+
+  const hasPending2fa = !!request.cookies.get(PENDING_2FA_COOKIE);
+  const hasPendingSetup = !!request.cookies.get(PENDING_SETUP_COOKIE);
+
+  // Awaiting 2FA verification — redirect to verify page
+  if (hasPending2fa && pathname !== "/login/verify") {
+    return NextResponse.redirect(new URL("/login/verify", request.url));
+  }
+
+  // Awaiting forced 2FA setup — redirect to security page
+  if (hasPendingSetup && pathname !== "/account/security") {
+    return NextResponse.redirect(new URL("/account/security?setup=required", request.url));
+  }
+
+  // Allow remaining public paths
+  if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
@@ -31,19 +59,17 @@ export async function proxy(request: NextRequest) {
     if (CHANGE_PW_PATHS.some(p => pathname.startsWith(p))) {
       return NextResponse.next();
     }
-    const changePwUrl = new URL("/change-password", request.url);
-    return NextResponse.redirect(changePwUrl);
+    return NextResponse.redirect(new URL("/change-password", request.url));
   }
 
   // Admin-only routes
   if (ADMIN_PATHS.some(p => pathname.startsWith(p)) && session.role !== "admin") {
-    const homeUrl = new URL("/", request.url);
-    return NextResponse.redirect(homeUrl);
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|images/).*)"],
 };

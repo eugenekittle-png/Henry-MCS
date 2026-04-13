@@ -131,7 +131,7 @@ export default function Navbar() {
                   : "text-gray-300 hover:text-white hover:bg-white/10"
               }`}
             >
-              Tools
+              Procedures
               <svg
                 className={`w-3.5 h-3.5 transition-transform ${toolsOpen ? "rotate-180" : ""}`}
                 fill="none"
@@ -258,17 +258,46 @@ export default function Navbar() {
             <button
               onClick={() => setUserOpen(!userOpen)}
               className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-semibold hover:bg-indigo-400 transition-colors"
-              title={user.username}
+              title={user.email}
             >
-              {user.username[0]?.toUpperCase() ?? "U"}
+              {user.email[0]?.toUpperCase() ?? "U"}
             </button>
 
             {userOpen && (
               <div className="absolute right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                 <div className="px-4 py-2 border-b border-gray-100">
                   <p className="text-xs text-gray-400">Signed in as</p>
-                  <p className="text-sm font-semibold text-gray-800 truncate">{user.username}</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{user.email}</p>
+                  <p className="text-xs text-gray-400 font-mono mt-0.5">{user.username}</p>
                 </div>
+                <div className="px-4 pt-2 pb-1">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Settings</p>
+                </div>
+                <Link
+                  href="/account/profile"
+                  className={`flex items-center gap-3 px-4 py-2 text-sm transition-colors ${
+                    pathname === "/account/profile" ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                  onClick={() => setUserOpen(false)}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Profile
+                </Link>
+                <Link
+                  href="/account/security"
+                  className={`flex items-center gap-3 px-4 py-2 text-sm transition-colors ${
+                    pathname.startsWith("/account/security") ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                  onClick={() => setUserOpen(false)}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  Security
+                </Link>
+                <div className="border-t border-gray-100 my-1" />
                 <Link
                   href="/my-usage"
                   className={`flex items-center gap-3 px-4 py-2 text-sm transition-colors ${
@@ -292,6 +321,18 @@ export default function Navbar() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                   Feedback Forum
+                </Link>
+                <Link
+                  href="/help"
+                  className={`flex items-center gap-3 px-4 py-2 text-sm transition-colors ${
+                    pathname.startsWith("/help") ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                  onClick={() => setUserOpen(false)}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Help
                 </Link>
                 <div className="border-t border-gray-100 my-1" />
                 <button

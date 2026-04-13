@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/AuthContext";
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,17 +22,26 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Login failed");
         return;
       }
+      if (data.requires2FA) {
+        router.push("/login/verify");
+        return;
+      }
+      if (data.requiresSetup) {
+        router.push("/account/security?setup=required");
+        return;
+      }
       if (data.mustChangePassword) {
+        login(data.username, data.email, data.role);
         router.push("/change-password");
       } else {
-        login(data.username, data.role);
+        login(data.username, data.email, data.role);
         router.push("/");
       }
     } catch {
@@ -55,16 +64,16 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                Username
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
               </label>
               <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
+                id="email"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
                 required
-                autoComplete="username"
+                autoComplete="email"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>

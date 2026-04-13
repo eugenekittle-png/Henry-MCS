@@ -77,12 +77,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await logAction({ username: session?.username ?? null, action: "Compare-Diff", clientNumber, matterNumber, details, success: true, ipAddress: ip });
+    await logAction({ username: session?.email ?? null, action: "Compare-Diff", clientNumber, matterNumber, details, success: true, ipAddress: ip });
 
     return Response.json({ file1Name: file1.name, file2Name: file2.name, lines });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    await logAction({ username: session?.username ?? null, action: "Compare-Diff", details: { error: message }, success: false, ipAddress: ip });
+    await logAction({ username: session?.email ?? null, action: "Compare-Diff", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status: 500 });
   }
 }

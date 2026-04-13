@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
-  serverExternalPackages: ["pdf-parse", "mammoth", "word-extractor", "pdfkit", "sharp"],
+  serverExternalPackages: ["pdf-parse", "mammoth", "word-extractor", "pdfkit", "sharp", "otplib", "qrcode"],
   experimental: {
     serverActions: {
       bodySizeLimit: "50mb",

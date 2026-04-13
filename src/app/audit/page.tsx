@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { downloadCSV } from "@/lib/csv";
 
 interface AuditLog {
   id: number;
@@ -106,12 +107,37 @@ export default function AuditPage() {
           <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
           <p className="text-gray-600 text-sm mt-1">{total.toLocaleString()} total events</p>
         </div>
-        <button
-          onClick={() => fetchLogs(offset)}
-          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-        >
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => downloadCSV("audit-log.csv", filtered.map(l => ({
+              ...l,
+              created_at: formatDate(l.created_at),
+              action: ACTION_LABELS[l.action.toLowerCase()] ?? l.action,
+              success: l.success ? "Success" : "Failed",
+              details: l.details ? (() => { try { return JSON.stringify(JSON.parse(l.details!)); } catch { return l.details; } })() : "",
+            })), [
+              { key: "created_at", label: "Date / Time" },
+              { key: "username", label: "User" },
+              { key: "action", label: "Action" },
+              { key: "client_number", label: "Client" },
+              { key: "matter_number", label: "Matter" },
+              { key: "ip_address", label: "IP Address" },
+              { key: "details", label: "Details" },
+              { key: "tokens_input", label: "Tokens In" },
+              { key: "tokens_output", label: "Tokens Out" },
+              { key: "success", label: "Status" },
+            ])}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          >
+            Download CSV
+          </button>
+          <button
+            onClick={() => fetchLogs(offset)}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

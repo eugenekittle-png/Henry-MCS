@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { downloadCSV } from "@/lib/csv";
 
 interface UsageRow {
   label: string;
@@ -152,12 +153,60 @@ export default function UsagePage() {
             Claude Sonnet 4.6 — ${INPUT_COST_PER_M.toFixed(2)}/M input tokens, ${OUTPUT_COST_PER_M.toFixed(2)}/M output tokens
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-        >
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              if (groupBy === "log") {
+                downloadCSV("usage-log.csv", logRows.map(r => ({
+                  ...r,
+                  created_at: fmtDateTime(r.created_at),
+                  action: ACTION_LABELS[r.action] ?? r.action,
+                  cost: fmtCost(calcCost(r.tokens_input ?? 0, r.tokens_output ?? 0)),
+                  success: r.success ? "OK" : "Failed",
+                })), [
+                  { key: "created_at", label: "Date & Time" },
+                  { key: "username", label: "User" },
+                  { key: "action", label: "Action" },
+                  { key: "client_number", label: "Client" },
+                  { key: "matter_number", label: "Matter" },
+                  { key: "tokens_input", label: "In Tokens" },
+                  { key: "tokens_output", label: "Out Tokens" },
+                  { key: "cost", label: "Cost" },
+                  { key: "success", label: "Status" },
+                ]);
+              } else {
+                downloadCSV(`usage-by-${groupBy}.csv`, rows.map(r => ({
+                  label: r.label,
+                  total_requests: r.total_requests,
+                  ai_requests: r.ai_requests,
+                  total_input: r.total_input,
+                  total_output: r.total_output,
+                  input_cost: fmtCost((r.total_input / 1_000_000) * INPUT_COST_PER_M),
+                  output_cost: fmtCost((r.total_output / 1_000_000) * OUTPUT_COST_PER_M),
+                  total_cost: fmtCost(calcCost(r.total_input, r.total_output)),
+                })), [
+                  { key: "label", label: COL_HEADERS[groupBy as Exclude<GroupBy, "log">] },
+                  { key: "total_requests", label: "Requests" },
+                  { key: "ai_requests", label: "AI Requests" },
+                  { key: "total_input", label: "Input Tokens" },
+                  { key: "total_output", label: "Output Tokens" },
+                  { key: "input_cost", label: "Input Cost" },
+                  { key: "output_cost", label: "Output Cost" },
+                  { key: "total_cost", label: "Total Cost" },
+                ]);
+              }
+            }}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          >
+            Download CSV
+          </button>
+          <button
+            onClick={handleRefresh}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Summary cards — only for aggregated views */}

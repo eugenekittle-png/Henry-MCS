@@ -21,12 +21,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!client_number || !name) return Response.json({ error: "Client number and name are required" }, { status: 400 });
 
     const updated = await updateClient(clientId, client_number, name);
-    await logAction({ username: session?.username ?? null, action: "Client-Update", details: { clientId, clientNumber: client_number, name }, success: true, ipAddress: ip });
+    await logAction({ username: session?.email ?? null, action: "Client-Update", details: { clientId, clientNumber: client_number, name }, success: true, ipAddress: ip });
     return Response.json(updated);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update client";
     const status = message.includes("UNIQUE") ? 409 : 500;
-    await logAction({ username: session?.username ?? null, action: "Client-Update", details: { error: message }, success: false, ipAddress: ip });
+    await logAction({ username: session?.email ?? null, action: "Client-Update", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status });
   }
 }
@@ -45,6 +45,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!existing) return Response.json({ error: "Client not found" }, { status: 404 });
 
   await deleteClient(clientId);
-  await logAction({ username: session?.username ?? null, action: "Client-Delete", details: { clientId, clientNumber: existing.client_number, name: existing.name }, success: true, ipAddress: ip });
+  await logAction({ username: session?.email ?? null, action: "Client-Delete", details: { clientId, clientNumber: existing.client_number, name: existing.name }, success: true, ipAddress: ip });
   return Response.json({ success: true });
 }
