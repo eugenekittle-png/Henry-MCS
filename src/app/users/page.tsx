@@ -153,7 +153,38 @@ export default function UsersPage() {
     fetchUsers();
   };
 
-  const isLocked = (user: User) => !!user.locked_until && new Date(user.locked_until + "Z") > new Date();
+  const handleDisable = async (user: User) => {
+    if (!confirm(`Disable ${user.email}? They will be immediately signed out and unable to log in.`)) return;
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: user.role, disable: true }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error || "Failed to disable account");
+      return;
+    }
+    fetchUsers();
+  };
+
+  const handleEnable = async (user: User) => {
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: user.role, enable: true }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error || "Failed to enable account");
+      return;
+    }
+    fetchUsers();
+  };
+
+  const DISABLED_SENTINEL = "9999-12-31 23:59:59";
+  const isDisabled = (user: User) => user.locked_until === DISABLED_SENTINEL;
+  const isLocked = (user: User) => !isDisabled(user) && !!user.locked_until && new Date(user.locked_until + "Z") > new Date();
 
   const handleCancel = () => {
     setEditingId(null);
@@ -401,6 +432,9 @@ export default function UsersPage() {
                         ) : (
                           <span className="text-gray-400 italic text-xs">No name</span>
                         )}
+                        {isDisabled(user) && (
+                          <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600" title="Account disabled">Disabled</span>
+                        )}
                         {isLocked(user) && (
                           <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700" title="Account locked">Locked</span>
                         )}
@@ -431,8 +465,15 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-3">
-                        {isLocked(user) && (
-                          <button onClick={() => handleUnlock(user)} className="text-green-600 hover:text-green-800 text-sm font-medium">Unlock</button>
+                        {isDisabled(user) ? (
+                          <button onClick={() => handleEnable(user)} className="text-green-600 hover:text-green-800 text-sm font-medium">Enable</button>
+                        ) : (
+                          <>
+                            {isLocked(user) && (
+                              <button onClick={() => handleUnlock(user)} className="text-green-600 hover:text-green-800 text-sm font-medium">Unlock</button>
+                            )}
+                            <button onClick={() => handleDisable(user)} className="text-orange-600 hover:text-orange-800 text-sm font-medium">Disable</button>
+                          </>
                         )}
                         {user.totp_enabled ? (
                           <button onClick={() => handleDisable2fa(user)} className="text-amber-600 hover:text-amber-800 text-sm font-medium">Disable 2FA</button>

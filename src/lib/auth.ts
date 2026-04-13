@@ -1,4 +1,7 @@
 import { cookies } from "next/headers";
+import { getUserLockStatus } from "@/lib/db";
+
+export { hashPassword, verifyPassword } from "@/lib/password";
 
 const AUTH_SECRET = process.env.AUTH_SECRET || "henry-mcs-dev-secret-change-in-prod";
 const SESSION_COOKIE = "henry_session";
@@ -15,39 +18,11 @@ export interface SessionPayload {
   exp: number;
 }
 
-// --- Password hashing with PBKDF2 ---
+// --- Session signing key ---
 
 async function getKey(secret: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
   return crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const hash = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
-    keyMaterial,
-    256
-  );
-  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, "0")).join("");
-  const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
-  return `${saltHex}:${hashHex}`;
-}
-
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [saltHex, hashHex] = stored.split(":");
-  const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(h => parseInt(h, 16)));
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const hash = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
-    keyMaterial,
-    256
-  );
-  const computed = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
-  return computed === hashHex;
 }
 
 // --- Session token (HMAC-signed JSON) ---
@@ -109,7 +84,20 @@ export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifySessionToken(token);
+  const payload = await verifySessionToken(token);
+  if (!payload) return null;
+
+  // Check DB to ensure the user hasn't been disabled since this session was created
+  const lockStatus = await getUserLockStatus(payload.userId);
+  if (lockStatus?.locked_until) {
+    const lockedUntil = new Date(lockStatus.locked_until + "Z");
+    if (lockedUntil > new Date()) {
+      cookieStore.delete(SESSION_COOKIE);
+      return null;
+    }
+  }
+
+  return payload;
 }
 
 export async function clearSessionCookie() {

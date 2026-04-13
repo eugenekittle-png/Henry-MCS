@@ -1,5 +1,5 @@
 import { createClient } from "@libsql/client";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword } from "@/lib/password";
 
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL || "file:data/henry-mcs.db",
@@ -562,6 +562,26 @@ export async function resetFailedLogins(userId: number) {
   });
 }
 
+export const DISABLED_SENTINEL = "9999-12-31 23:59:59";
+
+export async function disableUser(userId: number) {
+  await ensureInit();
+  await db.execute({
+    sql: "UPDATE users SET locked_until = ? WHERE id = ?",
+    args: [DISABLED_SENTINEL, userId],
+  });
+}
+
+export async function getUserLockStatus(userId: number): Promise<{ locked_until: string | null } | undefined> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT locked_until FROM users WHERE id = ?",
+    args: [userId],
+  });
+  if (!result.rows[0]) return undefined;
+  return result.rows[0] as unknown as { locked_until: string | null };
+}
+
 export async function updateLastLogin(userId: number) {
   await ensureInit();
   await db.execute({
@@ -673,6 +693,18 @@ export async function getAuditLogCount() {
   return result.rows[0].count as number;
 }
 
+const BILLABLE_ACTIONS = ["assist", "chat", "breakdown", "compare", "compare-diff", "compare_diff", "summarize", "ask", "breakdown-file"];
+const AUTH_ACTIONS = [
+  "login", "logout",
+  "change-password",
+  "2fa-disabled",
+  "user-create", "user-update", "user-delete",
+  "settings-update",
+  "client-create", "client-update", "client-delete",
+  "matter-create", "matter-update", "matter-delete",
+];
+const authActionsPlaceholders = AUTH_ACTIONS.map(() => "?").join(",");
+
 export async function getAuditLogsFiltered(params: {
   from?: string;
   to?: string;
@@ -680,9 +712,10 @@ export async function getAuditLogsFiltered(params: {
   limit?: number;
   offset?: number;
   billableOnly?: boolean;
+  excludeAuthActions?: boolean;
 }) {
   await ensureInit();
-  const { from, to, username, limit = 200, offset = 0, billableOnly = false } = params;
+  const { from, to, username, limit = 200, offset = 0, billableOnly = false, excludeAuthActions = false } = params;
   const conditions: string[] = [];
   const args: (string | number)[] = [];
 
@@ -692,6 +725,10 @@ export async function getAuditLogsFiltered(params: {
   if (billableOnly) {
     conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
+  }
+  if (excludeAuthActions) {
+    conditions.push(`LOWER(action) NOT IN (${AUTH_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...AUTH_ACTIONS);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -715,9 +752,9 @@ export async function getAuditLogsFiltered(params: {
   }[];
 }
 
-export async function getAuditLogsFilteredCount(params: { from?: string; to?: string; username?: string; billableOnly?: boolean }) {
+export async function getAuditLogsFilteredCount(params: { from?: string; to?: string; username?: string; billableOnly?: boolean; excludeAuthActions?: boolean }) {
   await ensureInit();
-  const { from, to, username, billableOnly = false } = params;
+  const { from, to, username, billableOnly = false, excludeAuthActions = false } = params;
   const conditions: string[] = [];
   const args: string[] = [];
 
@@ -728,6 +765,10 @@ export async function getAuditLogsFilteredCount(params: { from?: string; to?: st
     conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
   }
+  if (excludeAuthActions) {
+    conditions.push(`LOWER(action) NOT IN (${AUTH_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...AUTH_ACTIONS);
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const result = await db.execute({ sql: `SELECT COUNT(*) as count FROM audit_logs ${where}`, args });
@@ -736,49 +777,61 @@ export async function getAuditLogsFilteredCount(params: { from?: string; to?: st
 
 export async function getUsageByUser() {
   await ensureInit();
-  const result = await db.execute(`
-    SELECT
-      COALESCE(username, '(unknown)') as label,
-      COUNT(*) as total_requests,
-      SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
-      COALESCE(SUM(tokens_input), 0) as total_input,
-      COALESCE(SUM(tokens_output), 0) as total_output
-    FROM audit_logs
-    GROUP BY COALESCE(username, '(unknown)')
-    ORDER BY total_input + total_output DESC
-  `);
+  const result = await db.execute({
+    sql: `
+      SELECT
+        COALESCE(username, '(unknown)') as label,
+        COUNT(*) as total_requests,
+        SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+        COALESCE(SUM(tokens_input), 0) as total_input,
+        COALESCE(SUM(tokens_output), 0) as total_output
+      FROM audit_logs
+      WHERE LOWER(action) NOT IN (${authActionsPlaceholders})
+      GROUP BY COALESCE(username, '(unknown)')
+      ORDER BY total_input + total_output DESC
+    `,
+    args: [...AUTH_ACTIONS],
+  });
   return result.rows as unknown as UsageRow[];
 }
 
 export async function getUsageByClient() {
   await ensureInit();
-  const result = await db.execute(`
-    SELECT
-      COALESCE(client_number, '(none)') as label,
-      COUNT(*) as total_requests,
-      SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
-      COALESCE(SUM(tokens_input), 0) as total_input,
-      COALESCE(SUM(tokens_output), 0) as total_output
-    FROM audit_logs
-    GROUP BY COALESCE(client_number, '(none)')
-    ORDER BY total_input + total_output DESC
-  `);
+  const result = await db.execute({
+    sql: `
+      SELECT
+        COALESCE(client_number, '(none)') as label,
+        COUNT(*) as total_requests,
+        SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+        COALESCE(SUM(tokens_input), 0) as total_input,
+        COALESCE(SUM(tokens_output), 0) as total_output
+      FROM audit_logs
+      WHERE LOWER(action) NOT IN (${authActionsPlaceholders})
+      GROUP BY COALESCE(client_number, '(none)')
+      ORDER BY total_input + total_output DESC
+    `,
+    args: [...AUTH_ACTIONS],
+  });
   return result.rows as unknown as UsageRow[];
 }
 
 export async function getUsageByMatter() {
   await ensureInit();
-  const result = await db.execute(`
-    SELECT
-      COALESCE(client_number, '(none)') || ' / ' || COALESCE(matter_number, '(none)') as label,
-      COUNT(*) as total_requests,
-      SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
-      COALESCE(SUM(tokens_input), 0) as total_input,
-      COALESCE(SUM(tokens_output), 0) as total_output
-    FROM audit_logs
-    GROUP BY COALESCE(client_number, '(none)'), COALESCE(matter_number, '(none)')
-    ORDER BY total_input + total_output DESC
-  `);
+  const result = await db.execute({
+    sql: `
+      SELECT
+        COALESCE(client_number, '(none)') || ' / ' || COALESCE(matter_number, '(none)') as label,
+        COUNT(*) as total_requests,
+        SUM(CASE WHEN tokens_input IS NOT NULL THEN 1 ELSE 0 END) as ai_requests,
+        COALESCE(SUM(tokens_input), 0) as total_input,
+        COALESCE(SUM(tokens_output), 0) as total_output
+      FROM audit_logs
+      WHERE LOWER(action) NOT IN (${authActionsPlaceholders})
+      GROUP BY COALESCE(client_number, '(none)'), COALESCE(matter_number, '(none)')
+      ORDER BY total_input + total_output DESC
+    `,
+    args: [...AUTH_ACTIONS],
+  });
   return result.rows as unknown as UsageRow[];
 }
 
@@ -789,8 +842,6 @@ export interface UsageRow {
   total_input: number;
   total_output: number;
 }
-
-const BILLABLE_ACTIONS = ["assist", "chat", "breakdown", "compare", "compare-diff", "compare_diff", "summarize", "ask", "breakdown-file"];
 
 export async function getUsageForUser(username: string, from?: string, to?: string, billableOnly = false) {
   await ensureInit();

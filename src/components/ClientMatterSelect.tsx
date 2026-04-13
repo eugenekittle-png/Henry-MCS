@@ -41,11 +41,27 @@ export default function ClientMatterSelect({
   const clientTimer = useRef<any>(null);
   const matterTimer = useRef<any>(null);
 
+  function fetchTopClients() {
+    setClientLoading(true);
+    fetch(`/api/clients?limit=10`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setClientResults(data))
+      .catch(() => {})
+      .finally(() => setClientLoading(false));
+  }
+
+  function handleClientFocus() {
+    setShowClientResults(true);
+    if (clientSearch.length < 1 && clientResults.length === 0) {
+      fetchTopClients();
+    }
+  }
+
   function handleClientInput(value: string) {
     setClientSearch(value);
     setShowClientResults(true);
     clearTimeout(clientTimer.current);
-    if (value.length < 1) { setClientResults([]); return; }
+    if (value.length < 1) { fetchTopClients(); return; }
     clientTimer.current = setTimeout(() => {
       setClientLoading(true);
       fetch(`/api/clients?search=${encodeURIComponent(value)}`)
@@ -63,7 +79,7 @@ export default function ClientMatterSelect({
     setShowClientResults(false);
     setSelectedMatter(null);
     setMatterSearch("");
-    setMatterResults([]);
+    setMatterResults([]); // cleared so focus on matter field fetches top 10 for new client
     onClear();
   }
 
@@ -77,11 +93,28 @@ export default function ClientMatterSelect({
     onClear();
   }
 
+  function fetchTopMatters(clientId: number) {
+    setMatterLoading(true);
+    fetch(`/api/clients/${clientId}/matters?limit=10`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setMatterResults(data))
+      .catch(() => {})
+      .finally(() => setMatterLoading(false));
+  }
+
+  function handleMatterFocus() {
+    if (!selectedClient) return;
+    setShowMatterResults(true);
+    if (matterSearch.length < 1 && matterResults.length === 0) {
+      fetchTopMatters(selectedClient.id);
+    }
+  }
+
   function handleMatterInput(value: string) {
     setMatterSearch(value);
     setShowMatterResults(true);
     clearTimeout(matterTimer.current);
-    if (value.length < 1) { setMatterResults([]); return; }
+    if (value.length < 1) { if (selectedClient) fetchTopMatters(selectedClient.id); return; }
     matterTimer.current = setTimeout(() => {
       if (!selectedClient) return;
       setMatterLoading(true);
@@ -135,7 +168,7 @@ export default function ClientMatterSelect({
                   type="text"
                   value={clientSearch}
                   onChange={e => handleClientInput(e.target.value)}
-                  onFocus={() => clientSearch.length >= 1 && setShowClientResults(true)}
+                  onFocus={handleClientFocus}
                   onBlur={() => setTimeout(() => setShowClientResults(false), 150)}
                   placeholder="Search client..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -181,7 +214,7 @@ export default function ClientMatterSelect({
                   type="text"
                   value={matterSearch}
                   onChange={e => handleMatterInput(e.target.value)}
-                  onFocus={() => matterSearch.length >= 1 && setShowMatterResults(true)}
+                  onFocus={handleMatterFocus}
                   onBlur={() => setTimeout(() => setShowMatterResults(false), 150)}
                   placeholder={selectedClient ? "Search matter..." : "Select client first"}
                   disabled={!selectedClient}

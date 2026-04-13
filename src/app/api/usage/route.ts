@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
     const limit = 100;
     const offset = page * limit;
     const [rows, total] = await Promise.all([
-      getAuditLogsFiltered({ from, to, limit, offset }),
-      getAuditLogsFilteredCount({ from, to }),
+      getAuditLogsFiltered({ from, to, limit, offset, excludeAuthActions: true }),
+      getAuditLogsFilteredCount({ from, to, excludeAuthActions: true }),
     ]);
     return NextResponse.json({ rows, total, page, limit });
   }

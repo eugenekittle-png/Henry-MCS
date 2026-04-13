@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, hashPassword } from "@/lib/auth";
-import { getUser, updateUserRole, updateUserPassword, deleteUser, resetFailedLogins, disableUserTotp, updateUserProfile } from "@/lib/db";
+import { getUser, updateUserRole, updateUserPassword, deleteUser, resetFailedLogins, disableUserTotp, updateUserProfile, disableUser } from "@/lib/db";
 import { validatePassword } from "@/lib/password";
 import { logAction, getClientIp } from "@/lib/audit";
 
@@ -18,12 +18,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const { role, password, unlock, disable2fa, email, first_name, last_name } = await request.json();
+  const { role, password, unlock, disable, enable, disable2fa, email, first_name, last_name } = await request.json();
   const changes: Record<string, unknown> = { targetUser: user.email ?? user.username };
 
-  if (unlock) {
+  if (disable) {
+    if (userId === session.userId) {
+      return NextResponse.json({ error: "Cannot disable your own account" }, { status: 400 });
+    }
+    await disableUser(userId);
+    changes.disabled = true;
+  }
+
+  if (enable || unlock) {
     await resetFailedLogins(userId);
-    changes.unlocked = true;
+    changes.enabled = true;
   }
 
   if (disable2fa) {

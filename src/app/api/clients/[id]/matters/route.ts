@@ -14,13 +14,14 @@ export async function GET(
   }
 
   const search = req.nextUrl.searchParams.get("search") ?? "";
+  const limit = parseInt(req.nextUrl.searchParams.get("limit") ?? "0", 10) || undefined;
   if (search.length >= 1) {
     const matters = await searchMatters(clientId, search);
-    return Response.json(matters);
+    return Response.json(limit ? matters.slice(0, limit) : matters);
   }
 
   const matters = await getMattersForClient(clientId);
-  return Response.json(matters);
+  return Response.json(limit ? matters.slice(0, limit) : matters);
 }
 
 export async function POST(

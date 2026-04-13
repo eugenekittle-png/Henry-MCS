@@ -5,12 +5,13 @@ import { logAction, getClientIp } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get("search") ?? "";
+  const limit = parseInt(req.nextUrl.searchParams.get("limit") ?? "0", 10) || undefined;
   if (search.length >= 1) {
     const clients = await searchClients(search);
-    return Response.json(clients);
+    return Response.json(limit ? clients.slice(0, limit) : clients);
   }
   const clients = await getClients();
-  return Response.json(clients);
+  return Response.json(limit ? clients.slice(0, limit) : clients);
 }
 
 export async function POST(req: NextRequest) {
