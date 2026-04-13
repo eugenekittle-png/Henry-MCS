@@ -1,4 +1,4 @@
-export function downloadCSV(filename: string, rows: Record<string, unknown>[], columns: { key: string; label: string }[]) {
+export function downloadCSV(filename: string, rows: object[], columns: { key: string; label: string }[]) {
   const escape = (v: unknown): string => {
     const s = v == null ? "" : String(v);
     return s.includes(",") || s.includes('"') || s.includes("\n")
@@ -6,7 +6,7 @@ export function downloadCSV(filename: string, rows: Record<string, unknown>[], c
       : s;
   };
   const header = columns.map(c => c.label).join(",");
-  const body = rows.map(r => columns.map(c => escape(r[c.key])).join(",")).join("\n");
+  const body = rows.map(r => columns.map(c => escape((r as Record<string, unknown>)[c.key])).join(",")).join("\n");
   const csv = `${header}\n${body}`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
