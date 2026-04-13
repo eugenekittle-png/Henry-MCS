@@ -181,7 +181,7 @@ export default function WordAddinPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+        body: JSON.stringify({ email: loginUsername, password: loginPassword }),
       });
       const data = await res.json();
       if (!res.ok) { setLoginError(data.error || "Login failed"); return; }
@@ -459,7 +459,7 @@ export default function WordAddinPage() {
             <p className="text-gray-500 text-xs text-center mb-5">Sign in to continue</p>
             <form onSubmit={handleLogin} className="space-y-3">
               <input
-                type="text" placeholder="Username" value={loginUsername}
+                type="email" placeholder="Email" value={loginUsername}
                 onChange={e => setLoginUsername(e.target.value)} required
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
