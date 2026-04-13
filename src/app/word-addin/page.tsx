@@ -106,11 +106,27 @@ export default function WordAddinPage() {
   }, [officeReady]);
 
 
+  function fetchTopClients() {
+    setClientSearchLoading(true);
+    const headers: HeadersInit = {};
+    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+    fetch(`/api/clients?limit=10`, { headers })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setClientResults(data))
+      .catch(() => {})
+      .finally(() => setClientSearchLoading(false));
+  }
+
+  function handleClientFocus() {
+    setShowClientResults(true);
+    if (clientSearch.length < 1 && clientResults.length === 0) fetchTopClients();
+  }
+
   function handleClientSearchInput(value: string) {
     setClientSearch(value);
     setShowClientResults(true);
     clearTimeout(clientSearchTimer.current);
-    if (value.length < 1) { setClientResults([]); return; }
+    if (value.length < 1) { fetchTopClients(); return; }
     clientSearchTimer.current = setTimeout(() => {
       setClientSearchLoading(true);
       const headers: HeadersInit = {};
@@ -130,7 +146,7 @@ export default function WordAddinPage() {
     setShowClientResults(false);
     setSelectedMatter(null);
     setMatterSearch("");
-    setMatterResults([]);
+    setMatterResults([]); // cleared so focus fetches top 10 for new client
   }
 
   function handleClearClient() {
@@ -142,11 +158,28 @@ export default function WordAddinPage() {
     setMatterResults([]);
   }
 
+  function fetchTopMatters(clientId: number) {
+    setMatterSearchLoading(true);
+    const headers: HeadersInit = {};
+    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+    fetch(`/api/clients/${clientId}/matters?limit=10`, { headers })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setMatterResults(data))
+      .catch(() => {})
+      .finally(() => setMatterSearchLoading(false));
+  }
+
+  function handleMatterFocus() {
+    if (!selectedClient) return;
+    setShowMatterResults(true);
+    if (matterSearch.length < 1 && matterResults.length === 0) fetchTopMatters(selectedClient.id);
+  }
+
   function handleMatterSearchInput(value: string) {
     setMatterSearch(value);
     setShowMatterResults(true);
     clearTimeout(matterSearchTimer.current);
-    if (value.length < 1) { setMatterResults([]); return; }
+    if (value.length < 1) { if (selectedClient) fetchTopMatters(selectedClient.id); return; }
     matterSearchTimer.current = setTimeout(() => {
       if (!selectedClient) return;
       setMatterSearchLoading(true);
@@ -499,7 +532,7 @@ export default function WordAddinPage() {
                       type="text"
                       value={clientSearch}
                       onChange={e => handleClientSearchInput(e.target.value)}
-                      onFocus={() => clientSearch.length >= 1 && setShowClientResults(true)}
+                      onFocus={handleClientFocus}
                       onBlur={() => setTimeout(() => setShowClientResults(false), 150)}
                       placeholder="Search client…"
                       className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -534,7 +567,7 @@ export default function WordAddinPage() {
                       type="text"
                       value={matterSearch}
                       onChange={e => handleMatterSearchInput(e.target.value)}
-                      onFocus={() => matterSearch.length >= 1 && setShowMatterResults(true)}
+                      onFocus={handleMatterFocus}
                       onBlur={() => setTimeout(() => setShowMatterResults(false), 150)}
                       placeholder={selectedClient ? "Search matter…" : "Select client first"}
                       disabled={!selectedClient}
