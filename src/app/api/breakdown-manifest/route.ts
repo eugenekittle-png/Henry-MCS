@@ -61,16 +61,21 @@ export async function POST(req: NextRequest) {
   await getSession(); // auth check only
 
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+    const { blobUrl, fileName } = await req.json();
 
-    if (!file) return Response.json({ error: "No file provided" }, { status: 400 });
+    if (!blobUrl || !blobUrl.includes("blob.vercel-storage.com")) {
+      return Response.json({ error: "No valid blob URL provided" }, { status: 400 });
+    }
 
-    const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+    const name = (fileName as string) || "upload.zip";
+    const ext = name.includes(".") ? name.substring(name.lastIndexOf(".")).toLowerCase() : "";
     if (ext !== ".zip") return Response.json({ error: "Please upload a .zip file" }, { status: 400 });
-    if (file.size > MAX_BREAKDOWN_FILE_SIZE) return Response.json({ error: "File too large (max 50MB)" }, { status: 400 });
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const blobRes = await fetch(blobUrl);
+    if (!blobRes.ok) return Response.json({ error: "Failed to fetch uploaded file" }, { status: 400 });
+    const buffer = Buffer.from(await blobRes.arrayBuffer());
+
+    if (buffer.length > MAX_BREAKDOWN_FILE_SIZE) return Response.json({ error: "File too large (max 50MB)" }, { status: 400 });
     const zip = await JSZip.loadAsync(buffer);
 
     const files: ManifestFile[] = [];

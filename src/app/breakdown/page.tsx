@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { upload } from "@vercel/blob/client";
 import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
@@ -52,14 +53,17 @@ function estimateTime(files: ManifestFile[]): string {
 
 async function streamResponse(
   url: string,
-  formData: FormData,
+  body: Record<string, unknown>,
   onText: (text: string) => void,
   onError: (err: string) => void,
   onProgress?: (p: { stage: string; current: number; total: number; file: string }) => void,
 ): Promise<void> {
-  const response = await fetch(url, { method: "POST", body: formData });
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!response.ok) {
-    if (response.status === 413) throw new Error("File is too large to upload. Try a smaller zip file.");
     let errorMsg = `Request failed (${response.status})`;
     try {
       const data = await response.json();
@@ -104,6 +108,7 @@ export default function BreakdownPage() {
   const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("breakdown:selectedMatter", null);
 
   const [files, setFiles] = useState<File[]>([]);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [manifest, setManifest] = useState<{ files: ManifestFile[]; summary: ManifestSummary } | null>(null);
   const [manifestCollapsed, setManifestCollapsed] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -118,23 +123,30 @@ export default function BreakdownPage() {
   const [focusedError, setFocusedError] = useState<string | null>(null);
   const [analyzingFilePath, setAnalyzingFilePath] = useState<string | null>(null);
 
+  const deleteBlob = useCallback((url: string | null) => {
+    if (!url) return;
+    fetch("/api/blob/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }).catch(() => {});
+  }, []);
+
   const handleFiles = useCallback((newFiles: File[]) => {
     setFiles(newFiles.slice(0, 1));
+    setBlobUrl(prev => { deleteBlob(prev); return null; });
     setManifest(null);
     setManifestCollapsed(false);
     setFocusedFile(null);
     setFocusedContent("");
     setError(null);
-  }, []);
+  }, [deleteBlob]);
 
   const handleRemove = useCallback(() => {
     setFiles([]);
+    setBlobUrl(prev => { deleteBlob(prev); return null; });
     setManifest(null);
     setManifestCollapsed(false);
     setFocusedFile(null);
     setFocusedContent("");
     setError(null);
-  }, []);
+  }, [deleteBlob]);
 
   const handleClientMatterSelect = useCallback((client: Client, matter: Matter) => {
     setSelectedClient(client);
@@ -152,6 +164,7 @@ export default function BreakdownPage() {
   const hasResults = !!content || isStreaming;
 
   const handleReset = useCallback(() => {
+    setBlobUrl(prev => { deleteBlob(prev); return null; });
     setFiles([]);
     setManifest(null);
     setManifestCollapsed(false);
@@ -163,7 +176,7 @@ export default function BreakdownPage() {
     setFocusedError(null);
     setSelectedClient(null);
     setSelectedMatter(null);
-  }, []);
+  }, [deleteBlob]);
 
   const handleScan = useCallback(async () => {
     if (!files.length || !selectedClient || !selectedMatter) return;
@@ -174,19 +187,21 @@ export default function BreakdownPage() {
     setError(null);
     setIsScanning(true);
     try {
-      const formData = new FormData();
-      formData.append("file", files[0]);
-      const res = await fetch("/api/breakdown-manifest", { method: "POST", body: formData });
+      // Upload zip directly to Vercel Blob (bypasses serverless function size limit)
+      const blob = await upload(files[0].name, files[0], {
+        access: "public",
+        handleUploadUrl: "/api/blob/upload",
+      });
+      setBlobUrl(blob.url);
+
+      const res = await fetch("/api/breakdown-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blobUrl: blob.url, fileName: files[0].name }),
+      });
       if (!res.ok) {
-        let errorMsg = `Upload failed (${res.status})`;
-        try {
-          const data = await res.json();
-          errorMsg = data.error || errorMsg;
-        } catch {
-          const text = await res.text().catch(() => "");
-          if (text) errorMsg = text.slice(0, 200);
-        }
-        if (res.status === 413) errorMsg = "File is too large to upload. Try a smaller zip file.";
+        let errorMsg = `Scan failed (${res.status})`;
+        try { const data = await res.json(); errorMsg = data.error || errorMsg; } catch { /* ignore */ }
         throw new Error(errorMsg);
       }
       const data = await res.json();
@@ -199,7 +214,7 @@ export default function BreakdownPage() {
   }, [files, selectedClient, selectedMatter]);
 
   const handleAnalyzeAll = useCallback(async () => {
-    if (!files.length || !selectedClient || !selectedMatter) return;
+    if (!blobUrl || !selectedClient || !selectedMatter) return;
     setContent("");
     setError(null);
     setProgress(null);
@@ -207,14 +222,10 @@ export default function BreakdownPage() {
     setFocusedContent("");
     setManifestCollapsed(true);
     setIsStreaming(true);
-    const formData = new FormData();
-    formData.append("file", files[0]);
-    formData.append("clientId", String(selectedClient.id));
-    formData.append("matterId", String(selectedMatter.id));
     try {
       await streamResponse(
         "/api/breakdown",
-        formData,
+        { blobUrl, fileName: files[0]?.name ?? "upload.zip", clientId: selectedClient.id, matterId: selectedMatter.id },
         (text) => setContent(prev => prev + text),
         (err) => { setError(err); setIsStreaming(false); },
         (p) => setProgress(p as { stage: string; current: number; total: number; file: string }),
@@ -224,24 +235,19 @@ export default function BreakdownPage() {
     } finally {
       setIsStreaming(false);
     }
-  }, [files, selectedClient, selectedMatter]);
+  }, [blobUrl, files, selectedClient, selectedMatter]);
 
   const handleAnalyzeFile = useCallback(async (manifestFile: ManifestFile) => {
-    if (!files.length || !selectedClient || !selectedMatter) return;
+    if (!blobUrl || !selectedClient || !selectedMatter) return;
     setFocusedFile(manifestFile);
     setFocusedContent("");
     setFocusedError(null);
     setFocusedStreaming(true);
     setAnalyzingFilePath(manifestFile.path);
-    const formData = new FormData();
-    formData.append("file", files[0]);
-    formData.append("filePath", manifestFile.path);
-    formData.append("clientId", String(selectedClient.id));
-    formData.append("matterId", String(selectedMatter.id));
     try {
       await streamResponse(
         "/api/breakdown-file",
-        formData,
+        { blobUrl, zipFileName: files[0]?.name ?? "upload.zip", filePath: manifestFile.path, clientId: selectedClient.id, matterId: selectedMatter.id },
         (text) => setFocusedContent(prev => prev + text),
         (err) => { setFocusedError(err); setFocusedStreaming(false); },
       );
@@ -251,7 +257,7 @@ export default function BreakdownPage() {
       setFocusedStreaming(false);
       setAnalyzingFilePath(null);
     }
-  }, [files, selectedClient, selectedMatter]);
+  }, [blobUrl, files, selectedClient, selectedMatter]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">

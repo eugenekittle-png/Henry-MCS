@@ -19,32 +19,34 @@ export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
 
   try {
-    const formData = await req.formData();
-    const zipFile = formData.get("file") as File | null;
-    const filePath = formData.get("filePath") as string | null;
+    const { blobUrl, zipFileName, filePath, clientId, matterId } = await req.json();
 
-    if (!zipFile) return Response.json({ error: "No file provided" }, { status: 400 });
+    if (!blobUrl || !blobUrl.includes("blob.vercel-storage.com")) {
+      return Response.json({ error: "No valid blob URL provided" }, { status: 400 });
+    }
     if (!filePath) return Response.json({ error: "No filePath specified" }, { status: 400 });
-    if (zipFile.size > MAX_BREAKDOWN_FILE_SIZE) return Response.json({ error: "File too large (max 50MB)" }, { status: 400 });
 
-    const buffer = Buffer.from(await zipFile.arrayBuffer());
+    const blobRes = await fetch(blobUrl);
+    if (!blobRes.ok) return Response.json({ error: "Failed to fetch uploaded file" }, { status: 400 });
+    const buffer = Buffer.from(await blobRes.arrayBuffer());
+
+    if (buffer.length > MAX_BREAKDOWN_FILE_SIZE) return Response.json({ error: "File too large (max 50MB)" }, { status: 400 });
+
     const zip = await JSZip.loadAsync(buffer);
 
     const entry = zip.files[filePath];
     if (!entry || entry.dir) return Response.json({ error: `File not found in zip: ${filePath}` }, { status: 404 });
 
     const fileBuffer = Buffer.from(await entry.async("arraybuffer"));
-    const fileName = filePath.split("/").pop() || filePath;
+    const fileName = (filePath as string).split("/").pop() || filePath;
 
     const fileExt = fileName.includes(".") ? fileName.substring(fileName.lastIndexOf(".")).toLowerCase() : "";
     const isImage = IMAGE_EXTS.has(fileExt);
 
     let contextPrefix = "";
-    const contextDetails: Record<string, unknown> = { zipFile: zipFile.name, file: filePath };
+    const contextDetails: Record<string, unknown> = { zipFile: zipFileName || "upload.zip", file: filePath };
     let clientNumber: string | null = null;
     let matterNumber: string | null = null;
-    const clientId = formData.get("clientId");
-    const matterId = formData.get("matterId");
     if (clientId && matterId) {
       const client = await getClient(parseInt(clientId as string, 10));
       const matter = await getMatter(parseInt(matterId as string, 10));
