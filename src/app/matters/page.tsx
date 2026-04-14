@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Client } from "@/types";
 import { downloadCSV } from "@/lib/csv";
+import CsvImport from "@/components/CsvImport";
 
 interface MatterRow {
   id: number;
@@ -118,7 +119,15 @@ export default function MattersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Matters</h1>
           <p className="text-gray-600 text-sm mt-1">Manage matters across all clients.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <CsvImport
+            endpoint="/api/import/matters"
+            templateFilename="matters-template.csv"
+            templateColumns={["client_number", "matter_number", "description"]}
+            templateSample={[["C-001", "M-001", "Contract Review"], ["C-001", "M-002", "Litigation Support"]]}
+            label="Matters"
+            onDone={fetchData}
+          />
           <button
             onClick={() => downloadCSV("matters.csv", matters, [
               { key: "client_number", label: "Client Number" },

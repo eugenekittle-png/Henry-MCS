@@ -491,6 +491,15 @@ export async function getClient(id: number) {
   return (result.rows[0] as unknown as { id: number; client_number: string; name: string }) || undefined;
 }
 
+export async function getClientByNumber(clientNumber: string) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, client_number, name FROM clients WHERE client_number = ?",
+    args: [clientNumber],
+  });
+  return (result.rows[0] as unknown as { id: number; client_number: string; name: string }) || undefined;
+}
+
 export async function getMatter(id: number) {
   await ensureInit();
   const result = await db.execute({
@@ -667,6 +676,15 @@ export async function dbCreateUser(email: string, passwordHash: string, role: "a
     args: [principalId, email.toLowerCase(), firstName || null, lastName || null, passwordHash, role],
   });
   return getUser(Number(result.lastInsertRowid));
+}
+
+export async function dbImportUser(email: string, passwordHash: string, role: "admin" | "user", firstName: string | null, lastName: string | null) {
+  await ensureInit();
+  const principalId = await generateUniquePrincipalId();
+  await db.execute({
+    sql: "INSERT INTO users (username, email, first_name, last_name, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?, 1)",
+    args: [principalId, email.toLowerCase(), firstName, lastName, passwordHash, role],
+  });
 }
 
 export async function updateUserRole(id: number, role: "admin" | "user") {

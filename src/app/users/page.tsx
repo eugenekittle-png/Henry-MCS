@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { downloadCSV } from "@/lib/csv";
+import CsvImport from "@/components/CsvImport";
 
 interface User {
   id: number;
@@ -250,7 +251,15 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Users</h1>
           <p className="text-gray-600 text-sm mt-1">Manage user accounts and roles.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <CsvImport
+            endpoint="/api/import/users"
+            templateFilename="users-template.csv"
+            templateColumns={["email", "first_name", "last_name", "role"]}
+            templateSample={[["jane@example.com", "Jane", "Smith", "user"], ["bob@example.com", "Bob", "Jones", "admin"]]}
+            label="Users"
+            onDone={fetchUsers}
+          />
           <button
             onClick={handleDownloadCSV}
             className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"

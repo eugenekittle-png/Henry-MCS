@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Client } from "@/types";
 import { downloadCSV } from "@/lib/csv";
+import CsvImport from "@/components/CsvImport";
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -105,7 +106,15 @@ export default function ClientsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
           <p className="text-gray-600 text-sm mt-1">Manage your client records.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <CsvImport
+            endpoint="/api/import/clients"
+            templateFilename="clients-template.csv"
+            templateColumns={["client_number", "name"]}
+            templateSample={[["C-001", "Acme Corp"], ["C-002", "Globex LLC"]]}
+            label="Clients"
+            onDone={fetchClients}
+          />
           <button
             onClick={() => downloadCSV("clients.csv", clients, [
               { key: "client_number", label: "Client Number" },
