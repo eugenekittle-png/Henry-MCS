@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { upload } from "@vercel/blob/client";
 import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
@@ -127,6 +127,15 @@ export default function BreakdownPage() {
     if (!url) return;
     fetch("/api/blob/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) }).catch(() => {});
   }, []);
+
+  // Track current blob URL in a ref so the unmount cleanup always has the latest value
+  const blobUrlRef = useRef<string | null>(null);
+  useEffect(() => { blobUrlRef.current = blobUrl; }, [blobUrl]);
+
+  // Delete the blob when the user navigates away from the page
+  useEffect(() => {
+    return () => { deleteBlob(blobUrlRef.current); };
+  }, [deleteBlob]);
 
   const handleFiles = useCallback((newFiles: File[]) => {
     setFiles(newFiles.slice(0, 1));

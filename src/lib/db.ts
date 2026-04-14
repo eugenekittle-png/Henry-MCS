@@ -164,6 +164,21 @@ async function ensureInit() {
     }
   }
 
+  // Migrate: add Azure/federated SSO columns to users table
+  for (const stmt of [
+    "ALTER TABLE users ADD COLUMN auth_provider TEXT NOT NULL DEFAULT 'local'",
+    "ALTER TABLE users ADD COLUMN azure_id TEXT",
+  ]) {
+    try {
+      await db.execute(stmt);
+    } catch {
+      // column already exists
+    }
+  }
+  try {
+    await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_azure_id ON users (azure_id) WHERE azure_id IS NOT NULL");
+  } catch { /* exists */ }
+
   // Create suggestions tables
   await db.execute(`
     CREATE TABLE IF NOT EXISTS suggestions (
@@ -541,6 +556,43 @@ export async function getUserByEmail(email: string) {
   if (!result.rows[0]) return undefined;
   const row = result.rows[0] as unknown as { id: number; username: string; email: string; password_hash: string; role: "admin" | "user"; must_change_password: number; failed_login_attempts: number; locked_until: string | null };
   return { ...row, must_change_password: !!row.must_change_password, failed_login_attempts: row.failed_login_attempts ?? 0 };
+}
+
+export async function getUserByAzureId(azureId: string) {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, username, email, role, locked_until, auth_provider FROM users WHERE azure_id = ?",
+    args: [azureId],
+  });
+  if (!result.rows[0]) return undefined;
+  return result.rows[0] as unknown as { id: number; username: string; email: string; role: "admin" | "user"; locked_until: string | null; auth_provider: string };
+}
+
+export async function upsertAzureUser(azureId: string, email: string, displayName: string) {
+  await ensureInit();
+  // Check if a local user already exists with this email — if so, link the Azure ID to them
+  const existing = await db.execute({
+    sql: "SELECT id, username, email, role, locked_until FROM users WHERE LOWER(email) = LOWER(?)",
+    args: [email],
+  });
+  if (existing.rows[0]) {
+    const row = existing.rows[0] as unknown as { id: number; username: string; email: string; role: "admin" | "user"; locked_until: string | null };
+    await db.execute({ sql: "UPDATE users SET azure_id = ?, auth_provider = 'azure' WHERE id = ?", args: [azureId, row.id] });
+    return { ...row, isNew: false };
+  }
+  // No existing user — create one (no password, Azure-only account)
+  const principalId = await generateUniquePrincipalId();
+  const nameParts = displayName.trim().split(" ");
+  const firstName = nameParts[0] ?? "";
+  const lastName = nameParts.slice(1).join(" ") || "";
+  await db.execute({
+    sql: `INSERT INTO users (username, password_hash, role, must_change_password, email, first_name, last_name, auth_provider, azure_id)
+          VALUES (?, '', 'user', 0, ?, ?, ?, 'azure', ?)`,
+    args: [principalId, email.toLowerCase(), firstName, lastName, azureId],
+  });
+  const created = await db.execute({ sql: "SELECT id, username, email, role, locked_until FROM users WHERE azure_id = ?", args: [azureId] });
+  const row = created.rows[0] as unknown as { id: number; username: string; email: string; role: "admin" | "user"; locked_until: string | null };
+  return { ...row, isNew: true };
 }
 
 export async function incrementFailedLogins(userId: number) {

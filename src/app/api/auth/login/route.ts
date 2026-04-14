@@ -21,12 +21,12 @@ export async function POST(request: NextRequest) {
   if (user.locked_until) {
     const lockedUntil = new Date(user.locked_until + "Z");
     if (lockedUntil > new Date()) {
-      const minutesLeft = Math.ceil((lockedUntil.getTime() - Date.now()) / 60000);
-      await logAction({ username: user.email, action: "Login", details: { reason: "account locked", lockedUntil: user.locked_until }, success: false, ipAddress: ip });
-      return NextResponse.json(
-        { error: `Account is temporarily locked due to too many failed attempts. Try again in ${minutesLeft} minute${minutesLeft !== 1 ? "s" : ""}.` },
-        { status: 423 }
-      );
+      const isDisabled = user.locked_until.startsWith("9999");
+      await logAction({ username: user.email, action: "Login", details: { reason: isDisabled ? "account disabled" : "account locked", lockedUntil: user.locked_until }, success: false, ipAddress: ip });
+      const errorMsg = isDisabled
+        ? "This account has been disabled. Please contact your administrator."
+        : `Account is temporarily locked due to too many failed attempts. Try again in ${Math.ceil((lockedUntil.getTime() - Date.now()) / 60000)} minute${Math.ceil((lockedUntil.getTime() - Date.now()) / 60000) !== 1 ? "s" : ""}.`;
+      return NextResponse.json({ error: errorMsg }, { status: 423 });
     }
     await resetFailedLogins(user.id);
   }

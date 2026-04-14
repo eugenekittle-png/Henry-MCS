@@ -54,6 +54,45 @@ function ScreenshotPlaceholder({ label }: { label: string }) {
   );
 }
 
+function OverviewVideo() {
+  const [available, setAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/video/overview", { method: "HEAD" })
+      .then(r => setAvailable(r.ok))
+      .catch(() => setAvailable(false));
+  }, []);
+
+  if (available === null) return null;
+
+  if (!available) {
+    return (
+      <div className="mt-6 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center py-12 text-gray-300 bg-gray-50">
+        <svg className="w-10 h-10 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p className="text-sm font-medium">Overview Video</p>
+        <p className="text-xs mt-1">Coming soon</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-black">
+      <video
+        controls
+        preload="metadata"
+        className="w-full max-h-[480px]"
+        aria-label="Henry MCS overview video"
+      >
+        <source src="/api/video/overview" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+    </div>
+  );
+}
+
 export default function HelpPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -121,15 +160,8 @@ export default function HelpPage() {
           ))}
         </div>
 
-        {/* Overview video placeholder */}
-        <div className="mt-6 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center py-12 text-gray-300 bg-gray-50">
-          <svg className="w-10 h-10 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p className="text-sm font-medium">Overview Video</p>
-          <p className="text-xs mt-1">Coming soon</p>
-        </div>
+        {/* Overview video */}
+        <OverviewVideo />
       </div>
 
       <div className="space-y-12">
