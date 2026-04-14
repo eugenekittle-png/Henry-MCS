@@ -43,4 +43,9 @@ next-env.d.ts
 # sqlite database
 /data/
 
+# video files — hosted via Vercel Blob, not committed to repo
+*.mp4
+*.mov
+*.webm
+
 .vercel
