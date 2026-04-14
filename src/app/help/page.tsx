@@ -63,7 +63,22 @@ function OverviewVideoLink() {
       .catch(() => setAvailable(false));
   }, []);
 
-  if (!available) return null;
+  // Still checking
+  if (available === null) return null;
+
+  // Video not configured yet
+  if (!available) {
+    return (
+      <div className="mt-6 flex items-center gap-3 px-4 py-3 bg-gray-50 border border-dashed border-gray-200 rounded-xl text-sm text-gray-400">
+        <span className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
+          <svg className="w-3.5 h-3.5 text-gray-400 translate-x-px" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </span>
+        <span>Overview video — coming soon</span>
+      </div>
+    );
+  }
 
   return (
     <a
