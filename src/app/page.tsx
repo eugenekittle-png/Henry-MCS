@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/components/AuthContext";
@@ -216,9 +217,56 @@ function LandingPage() {
   );
 }
 
+const INTRO_DISMISSED_KEY = "henry-mcs-intro-dismissed";
+
+function GettingStarted() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem(INTRO_DISMISSED_KEY)) return;
+    fetch("/api/video/overview", { method: "HEAD" })
+      .then(r => { if (r.ok) setVisible(true); })
+      .catch(() => {});
+  }, []);
+
+  function dismiss() {
+    localStorage.setItem(INTRO_DISMISSED_KEY, "1");
+    setVisible(false);
+  }
+
+  if (!visible) return null;
+
+  return (
+    <div className="mb-10 bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm font-medium text-gray-700">Getting Started</span>
+        </div>
+        <button
+          onClick={dismiss}
+          title="Dismiss"
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <video controls preload="metadata" className="w-full max-h-[420px] bg-black" aria-label="Henry MCS overview">
+        <source src="/api/video/overview" type="video/mp4" />
+      </video>
+    </div>
+  );
+}
+
 function Dashboard() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-16">
+      <GettingStarted />
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-3">Document Analysis Tools</h1>
         <p className="text-lg text-gray-600">AI-powered tools to assist, break down, compare, and extract from your documents</p>

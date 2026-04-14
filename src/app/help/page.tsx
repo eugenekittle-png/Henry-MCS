@@ -54,7 +54,7 @@ function ScreenshotPlaceholder({ label }: { label: string }) {
   );
 }
 
-function OverviewVideo() {
+function OverviewVideoLink() {
   const [available, setAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -63,33 +63,28 @@ function OverviewVideo() {
       .catch(() => setAvailable(false));
   }, []);
 
-  if (available === null) return null;
-
-  if (!available) {
-    return (
-      <div className="mt-6 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center py-12 text-gray-300 bg-gray-50">
-        <svg className="w-10 h-10 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <p className="text-sm font-medium">Overview Video</p>
-        <p className="text-xs mt-1">Coming soon</p>
-      </div>
-    );
-  }
+  if (!available) return null;
 
   return (
-    <div className="mt-6 rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-black">
-      <video
-        controls
-        preload="metadata"
-        className="w-full max-h-[480px]"
-        aria-label="Henry MCS overview video"
-      >
-        <source src="/api/video/overview" type="video/mp4" />
-        Your browser does not support the video tag.
-      </video>
-    </div>
+    <a
+      href="/api/video/overview"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-6 flex items-center gap-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition-colors group"
+    >
+      <span className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center shrink-0 group-hover:bg-gray-700 transition-colors">
+        <svg className="w-3.5 h-3.5 text-white translate-x-px" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </span>
+      <span>
+        <span className="font-medium text-gray-900">Watch the Henry MCS overview</span>
+        <span className="text-gray-400 ml-2 text-xs">Opens video</span>
+      </span>
+      <svg className="w-4 h-4 text-gray-400 ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+      </svg>
+    </a>
   );
 }
 
@@ -160,8 +155,8 @@ export default function HelpPage() {
           ))}
         </div>
 
-        {/* Overview video */}
-        <OverviewVideo />
+        {/* Overview video link */}
+        <OverviewVideoLink />
       </div>
 
       <div className="space-y-12">
