@@ -678,12 +678,12 @@ export async function dbCreateUser(email: string, passwordHash: string, role: "a
   return getUser(Number(result.lastInsertRowid));
 }
 
-export async function dbImportUser(email: string, passwordHash: string, role: "admin" | "user", firstName: string | null, lastName: string | null) {
+export async function dbImportUser(email: string, passwordHash: string, role: "admin" | "user", firstName: string | null, lastName: string | null, mustChangePassword = true) {
   await ensureInit();
   const principalId = await generateUniquePrincipalId();
   await db.execute({
-    sql: "INSERT INTO users (username, email, first_name, last_name, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?, 1)",
-    args: [principalId, email.toLowerCase(), firstName, lastName, passwordHash, role],
+    sql: "INSERT INTO users (username, email, first_name, last_name, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    args: [principalId, email.toLowerCase(), firstName, lastName, passwordHash, role, mustChangePassword ? 1 : 0],
   });
 }
 

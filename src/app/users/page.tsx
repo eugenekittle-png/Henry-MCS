@@ -256,7 +256,8 @@ export default function UsersPage() {
             endpoint="/api/import/users"
             templateFilename="users-template.csv"
             templateColumns={["email", "first_name", "last_name", "role"]}
-            templateSample={[["jane@example.com", "Jane", "Smith", "user"], ["bob@example.com", "Bob", "Jones", "admin"]]}
+            optionalColumns={["password"]}
+            templateSample={[["jane@example.com", "Jane", "Smith", "user", ""], ["bob@example.com", "Bob", "Jones", "admin", "S3cure!Pass"]]}
             label="Users"
             onDone={fetchUsers}
           />

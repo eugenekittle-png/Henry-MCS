@@ -13,26 +13,29 @@ interface ImportResult {
 interface Props {
   endpoint: string;
   templateFilename: string;
-  templateColumns: string[];   // e.g. ["client_number", "name"]
-  templateSample: string[][];  // sample rows matching columns
-  label: string;               // e.g. "Clients"
-  onDone: () => void;          // refresh parent list
+  templateColumns: string[];          // required CSV column keys
+  optionalColumns?: string[];         // optional CSV column keys (shown as hints, included in template)
+  templateSample: string[][];         // sample rows matching required + optional columns in order
+  label: string;
+  onDone: () => void;
 }
 
-export default function CsvImport({ endpoint, templateFilename, templateColumns, templateSample, label, onDone }: Props) {
+export default function CsvImport({ endpoint, templateFilename, templateColumns, optionalColumns = [], templateSample, label, onDone }: Props) {
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const allColumns = [...templateColumns, ...optionalColumns];
+
   function downloadTemplate() {
     const rows = templateSample.map(r => {
       const obj: Record<string, string> = {};
-      templateColumns.forEach((col, i) => { obj[col] = r[i] ?? ""; });
+      allColumns.forEach((col, i) => { obj[col] = r[i] ?? ""; });
       return obj;
     });
-    downloadCSV(templateFilename, rows, templateColumns.map(c => ({ key: c, label: c })));
+    downloadCSV(templateFilename, rows, allColumns.map(c => ({ key: c, label: c })));
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -89,10 +92,13 @@ export default function CsvImport({ endpoint, templateFilename, templateColumns,
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>Required columns:</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span>Columns:</span>
             {templateColumns.map(c => (
               <code key={c} className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-700">{c}</code>
+            ))}
+            {optionalColumns.map(c => (
+              <code key={c} className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-400 border border-dashed border-gray-300">{c} <span className="font-normal">optional</span></code>
             ))}
             <button
               onClick={downloadTemplate}
