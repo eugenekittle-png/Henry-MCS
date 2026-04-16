@@ -50,17 +50,17 @@ export async function POST(req: NextRequest) {
     }
 
     const contextHint = [
-      clientNumber && clientName ? `Client on file: ${clientName} (${clientNumber})` : null,
-      matterNumber && matterDescription ? `Matter on file: ${matterDescription} (${matterNumber})` : null,
+      clientNumber && clientName ? `Client: ${clientName} (${clientNumber})` : null,
+      matterNumber && matterDescription ? `Matter: ${matterDescription} (${matterNumber})` : null,
     ].filter(Boolean).join("\n");
 
     const userContent = contextHint
-      ? `Context from the matter file:\n${contextHint}\n\nAnalyse this document and return the variable detection JSON array:\n\n${text}`
+      ? `The document below was prepared for the following client and matter. These are the CURRENT specific values that should be detected and replaced with template variables — include them in your results.\n${contextHint}\n\nAnalyse this document and return the variable detection JSON array:\n\n${text}`
       : `Analyse this document and return the variable detection JSON array:\n\n${text}`;
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: DETECT_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userContent }],
     });
