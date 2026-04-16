@@ -14,6 +14,16 @@ export interface DetectedVariable {
 interface WizardVariable extends DetectedVariable {
   name: string;
   enabled: boolean;
+  isManual: boolean;
+  isFromLibrary: boolean;
+}
+
+interface LibraryVariable {
+  id: number;
+  name: string;
+  type: string;
+  description: string | null;
+  is_manual: number;
 }
 
 interface ManageEntry {
@@ -68,6 +78,9 @@ interface Props {
 export default function TemplateWizard({ officeReady, tokenRef, selectedClient, selectedMatter }: Props) {
   const [mode, setMode] = useState<Mode>("create");
 
+  // Variable library
+  const [library, setLibrary] = useState<LibraryVariable[]>([]);
+
   // Create mode
   const [step, setStep] = useState<CreateStep>("idle");
   const [variables, setVariables] = useState<WizardVariable[]>([]);
@@ -98,6 +111,29 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
         }),
       });
     } catch { /* non-blocking */ }
+  }
+
+  // ── Library ──────────────────────────────────────────────────────────────
+
+  const loadLibrary = useCallback(async () => {
+    try {
+      const headers: HeadersInit = {};
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      const res = await fetch("/api/template-variables", { headers });
+      if (res.ok) setLibrary(await res.json());
+    } catch { /* non-blocking */ }
+  }, [tokenRef]);
+
+  // Load library once on mount
+  useState(() => { loadLibrary(); });
+
+  function normalize(s: string) {
+    return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  function matchLibrary(suggestedName: string): LibraryVariable | null {
+    const norm = normalize(suggestedName);
+    return library.find(v => normalize(v.name) === norm) ?? null;
   }
 
   // ── Create mode ──────────────────────────────────────────────────────────
@@ -151,7 +187,16 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
         return;
       }
 
-      setVariables(detected.map(v => ({ ...v, name: v.suggestedName, enabled: true })));
+      setVariables(detected.map(v => {
+        const match = matchLibrary(v.suggestedName);
+        return {
+          ...v,
+          name: match ? match.name : v.suggestedName,
+          enabled: true,
+          isManual: match ? match.is_manual === 1 : false,
+          isFromLibrary: !!match,
+        };
+      }));
       setStep("review");
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Something went wrong");
@@ -196,6 +241,26 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     }
 
     await auditLog("CreateTemplate (Word)", toApply.map(v => v.name));
+
+    // Save confirmed variables to the firm-wide library
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      await fetch("/api/template-variables", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          variables: toApply.map(v => ({
+            name: v.name.trim(),
+            type: v.type,
+            description: v.description || null,
+            isManual: v.isManual,
+          })),
+        }),
+      });
+      await loadLibrary();
+    } catch { /* non-blocking */ }
+
     setAppliedCount(applied);
     setStep("done");
     setApplyProgress(null);
@@ -207,6 +272,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     setCreateError(null);
     setApplyProgress(null);
     setAppliedCount(0);
+    loadLibrary(); // refresh in case new variables were added
   }
 
   function updateVariable(index: number, patch: Partial<WizardVariable>) {
@@ -441,7 +507,9 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
               <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
                 <div>
                   <p className="text-xs font-semibold text-gray-800">{variables.length} variables detected</p>
-                  <p className="text-xs text-gray-500">{enabledCount} selected for replacement</p>
+                  <p className="text-xs text-gray-500">
+                    {variables.filter(v => v.isFromLibrary).length} from library · {variables.filter(v => !v.isFromLibrary).length} new · {enabledCount} selected
+                  </p>
                 </div>
                 <button onClick={handleCreateReset} className="text-xs text-gray-400 hover:text-gray-600">Rescan</button>
               </div>
@@ -454,18 +522,32 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                         <div className="flex items-center gap-1.5 mb-1">
                           <input
                             type="text" value={v.name}
-                            onChange={e => updateVariable(i, { name: e.target.value })}
+                            onChange={e => updateVariable(i, { name: e.target.value, isFromLibrary: false })}
                             disabled={!v.enabled}
                             className="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs font-mono text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-50"
                           />
+                          {v.isFromLibrary
+                            ? <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0 font-medium">Library</span>
+                            : <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 flex-shrink-0">New</span>
+                          }
                           <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${TYPE_COLOURS[v.type]}`}>{TYPE_LABELS[v.type]}</span>
                         </div>
                         <p className="text-xs text-gray-500 leading-snug mb-1">{v.description}</p>
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1 mb-1.5">
                           {v.occurrences.map((occ, j) => (
                             <span key={j} className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-mono truncate max-w-full">{occ}</span>
                           ))}
                         </div>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={v.isManual}
+                            onChange={e => updateVariable(i, { isManual: e.target.checked })}
+                            disabled={!v.enabled}
+                            className="flex-shrink-0"
+                          />
+                          <span className="text-xs text-gray-500">Manual — always prompt when filling</span>
+                        </label>
                       </div>
                     </div>
                   </div>

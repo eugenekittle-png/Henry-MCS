@@ -214,6 +214,19 @@ async function ensureInit() {
     )
   `);
 
+  // Template variable library (firm-wide)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS template_variables (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      type TEXT NOT NULL DEFAULT 'other',
+      description TEXT,
+      is_manual INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   // Matrix extraction templates (per-user)
   await db.execute(`
     CREATE TABLE IF NOT EXISTS matrix_templates (
@@ -1439,4 +1452,55 @@ export async function setUserNavPins(userId: number, pins: string[]): Promise<vo
     sql: `UPDATE users SET nav_pins = ? WHERE id = ?`,
     args: [JSON.stringify(pins), userId],
   });
+}
+
+// ── Template variable library ─────────────────────────────────────────────────
+
+export interface TemplateVariable {
+  id: number;
+  name: string;
+  type: string;
+  description: string | null;
+  is_manual: number;
+  created_at: string;
+}
+
+export async function getTemplateVariables(): Promise<TemplateVariable[]> {
+  await ensureInit();
+  const result = await db.execute(
+    "SELECT id, name, type, description, is_manual, created_at FROM template_variables ORDER BY name"
+  );
+  return result.rows as unknown as TemplateVariable[];
+}
+
+export async function upsertTemplateVariables(
+  variables: { name: string; type: string; description: string | null; isManual: boolean }[]
+): Promise<void> {
+  await ensureInit();
+  for (const v of variables) {
+    await db.execute({
+      sql: `INSERT INTO template_variables (name, type, description, is_manual)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+              type = excluded.type,
+              description = COALESCE(excluded.description, template_variables.description),
+              updated_at = datetime('now')`,
+      args: [v.name, v.type, v.description ?? null, v.isManual ? 1 : 0],
+    });
+  }
+}
+
+export async function updateTemplateVariable(id: number, patch: { description?: string | null; is_manual?: boolean }): Promise<void> {
+  await ensureInit();
+  const sets: string[] = ["updated_at = datetime('now')"];
+  const args: (string | number | null)[] = [];
+  if ("description" in patch) { sets.push("description = ?"); args.push(patch.description ?? null); }
+  if ("is_manual" in patch) { sets.push("is_manual = ?"); args.push(patch.is_manual ? 1 : 0); }
+  args.push(id);
+  await db.execute({ sql: `UPDATE template_variables SET ${sets.join(", ")} WHERE id = ?`, args });
+}
+
+export async function deleteTemplateVariable(id: number): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM template_variables WHERE id = ?", args: [id] });
 }
