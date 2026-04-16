@@ -214,18 +214,50 @@ async function ensureInit() {
     )
   `);
 
-  // Template variable library (firm-wide)
+  // Template variable library (per-user, per-matter)
   await db.execute(`
     CREATE TABLE IF NOT EXISTS template_variables (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
+      user_id TEXT NOT NULL DEFAULT '',
+      client_number TEXT NOT NULL DEFAULT '',
+      matter_number TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'other',
       description TEXT,
       is_manual INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(name, user_id, client_number, matter_number)
     )
   `);
+  // Migrate existing firm-wide template_variables to per-user/matter schema
+  try {
+    const cols = await db.execute("PRAGMA table_info(template_variables)");
+    const hasUserId = (cols.rows as unknown as Array<{ name: string }>).some(r => r.name === "user_id");
+    if (!hasUserId) {
+      await db.execute("ALTER TABLE template_variables RENAME TO template_variables_legacy");
+      await db.execute(`
+        CREATE TABLE template_variables (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL DEFAULT '',
+          client_number TEXT NOT NULL DEFAULT '',
+          matter_number TEXT NOT NULL DEFAULT '',
+          name TEXT NOT NULL,
+          type TEXT NOT NULL DEFAULT 'other',
+          description TEXT,
+          is_manual INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          UNIQUE(name, user_id, client_number, matter_number)
+        )
+      `);
+      await db.execute(`
+        INSERT INTO template_variables (name, type, description, is_manual, created_at, updated_at)
+        SELECT name, type, description, is_manual, created_at, updated_at FROM template_variables_legacy
+      `);
+      await db.execute("DROP TABLE template_variables_legacy");
+    }
+  } catch { /* table is new or migration already done */ }
 
   // Matrix extraction templates (per-user)
   await db.execute(`
@@ -1465,42 +1497,48 @@ export interface TemplateVariable {
   created_at: string;
 }
 
-export async function getTemplateVariables(): Promise<TemplateVariable[]> {
+export async function getTemplateVariables(
+  userId: string, clientNumber: string, matterNumber: string
+): Promise<TemplateVariable[]> {
   await ensureInit();
-  const result = await db.execute(
-    "SELECT id, name, type, description, is_manual, created_at FROM template_variables ORDER BY name"
-  );
+  const result = await db.execute({
+    sql: "SELECT id, name, type, description, is_manual, created_at FROM template_variables WHERE user_id = ? AND client_number = ? AND matter_number = ? ORDER BY name",
+    args: [userId, clientNumber, matterNumber],
+  });
   return result.rows as unknown as TemplateVariable[];
 }
 
 export async function upsertTemplateVariables(
-  variables: { name: string; type: string; description: string | null; isManual: boolean }[]
+  variables: { name: string; type: string; description: string | null; isManual: boolean }[],
+  userId: string,
+  clientNumber: string,
+  matterNumber: string,
 ): Promise<void> {
   await ensureInit();
   for (const v of variables) {
     await db.execute({
-      sql: `INSERT INTO template_variables (name, type, description, is_manual)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
+      sql: `INSERT INTO template_variables (user_id, client_number, matter_number, name, type, description, is_manual)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(name, user_id, client_number, matter_number) DO UPDATE SET
               type = excluded.type,
               description = COALESCE(excluded.description, template_variables.description),
               updated_at = datetime('now')`,
-      args: [v.name, v.type, v.description ?? null, v.isManual ? 1 : 0],
+      args: [userId, clientNumber, matterNumber, v.name, v.type, v.description ?? null, v.isManual ? 1 : 0],
     });
   }
 }
 
-export async function updateTemplateVariable(id: number, patch: { description?: string | null; is_manual?: boolean }): Promise<void> {
+export async function updateTemplateVariable(id: number, userId: string, patch: { description?: string | null; is_manual?: boolean }): Promise<void> {
   await ensureInit();
   const sets: string[] = ["updated_at = datetime('now')"];
   const args: (string | number | null)[] = [];
   if ("description" in patch) { sets.push("description = ?"); args.push(patch.description ?? null); }
   if ("is_manual" in patch) { sets.push("is_manual = ?"); args.push(patch.is_manual ? 1 : 0); }
-  args.push(id);
-  await db.execute({ sql: `UPDATE template_variables SET ${sets.join(", ")} WHERE id = ?`, args });
+  args.push(id, userId);
+  await db.execute({ sql: `UPDATE template_variables SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`, args });
 }
 
-export async function deleteTemplateVariable(id: number): Promise<void> {
+export async function deleteTemplateVariable(id: number, userId: string): Promise<void> {
   await ensureInit();
-  await db.execute({ sql: "DELETE FROM template_variables WHERE id = ?", args: [id] });
+  await db.execute({ sql: "DELETE FROM template_variables WHERE id = ? AND user_id = ?", args: [id, userId] });
 }

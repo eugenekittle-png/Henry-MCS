@@ -117,13 +117,18 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
   // ── Library ──────────────────────────────────────────────────────────────
 
   const loadLibrary = useCallback(async () => {
+    if (!selectedClient || !selectedMatter) return;
     try {
+      const params = new URLSearchParams({
+        clientNumber: selectedClient.client_number,
+        matterNumber: selectedMatter.matter_number,
+      });
       const headers: HeadersInit = {};
       if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
-      const res = await fetch("/api/template-variables", { headers });
+      const res = await fetch(`/api/template-variables?${params}`, { headers });
       if (res.ok) setLibrary(await res.json());
     } catch { /* non-blocking */ }
-  }, [tokenRef]);
+  }, [tokenRef, selectedClient, selectedMatter]);
 
   // Load library once on mount
   useEffect(() => { loadLibrary(); }, [loadLibrary]);
@@ -244,7 +249,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
 
     await auditLog("CreateTemplate (Word)", toApply.map(v => v.name));
 
-    // Save confirmed variables to the firm-wide library
+    // Save confirmed variables scoped to this user + client/matter
     try {
       const headers: HeadersInit = { "Content-Type": "application/json" };
       if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
@@ -258,6 +263,8 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
             description: v.description || null,
             isManual: v.isManual,
           })),
+          clientNumber: selectedClient?.client_number ?? "",
+          matterNumber: selectedMatter?.matter_number ?? "",
         }),
       });
       await loadLibrary();
