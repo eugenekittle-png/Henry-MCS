@@ -638,7 +638,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                 Review Variables
               </button>
               <button onClick={handleCreateReset} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-xs font-medium">
-                Scan Another Document
+                Start Over
               </button>
             </div>
           )}
