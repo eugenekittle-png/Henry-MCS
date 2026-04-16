@@ -42,6 +42,10 @@ const ACTION_LABELS: Record<string, string> = {
   assist: "Assist",
   chat: "Chat",
   ask: "Ask (Word)",
+  "ask (word)": "Ask (Word)",
+  "createtemplate (word)": "CreateTemplate (Word)",
+  "renamevariable (word)": "RenameVariable (Word)",
+  "deletevariable (word)": "DeleteVariable (Word)",
   user_create: "Create User",
   user_update: "Update User",
   user_delete: "Delete User",
@@ -64,6 +68,10 @@ const ACTION_COLORS: Record<string, string> = {
   login: "bg-gray-100 text-gray-600",
   logout: "bg-gray-100 text-gray-600",
   change_password: "bg-gray-100 text-gray-600",
+  "createtemplate (word)": "bg-teal-100 text-teal-700",
+  "renamevariable (word)": "bg-teal-100 text-teal-700",
+  "deletevariable (word)": "bg-teal-100 text-teal-700",
+  "ask (word)": "bg-indigo-100 text-indigo-700",
 };
 
 // Colors for pie chart slices — matches action badge colors where possible

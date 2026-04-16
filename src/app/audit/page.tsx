@@ -35,6 +35,10 @@ const ACTION_LABELS: Record<string, string> = {
   client_delete: "Delete Client",
   matter_update: "Update Matter",
   matter_delete: "Delete Matter",
+  "createtemplate (word)": "CreateTemplate (Word)",
+  "renamevariable (word)": "RenameVariable (Word)",
+  "deletevariable (word)": "DeleteVariable (Word)",
+  "ask (word)": "Ask (Word)",
 };
 
 const ACTION_COLORS: Record<string, string> = {
@@ -55,6 +59,10 @@ const ACTION_COLORS: Record<string, string> = {
   client_delete: "bg-red-100 text-red-800",
   matter_update: "bg-amber-100 text-amber-800",
   matter_delete: "bg-red-100 text-red-800",
+  "createtemplate (word)": "bg-teal-100 text-teal-800",
+  "renamevariable (word)": "bg-teal-100 text-teal-800",
+  "deletevariable (word)": "bg-teal-100 text-teal-800",
+  "ask (word)": "bg-indigo-100 text-indigo-800",
 };
 
 const PAGE_SIZE = 100;
@@ -182,6 +190,7 @@ export default function AuditPage() {
         {loading ? (
           <div className="px-4 py-10 text-center text-gray-500 text-sm">Loading...</div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -267,6 +276,7 @@ export default function AuditPage() {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

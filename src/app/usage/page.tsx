@@ -42,6 +42,10 @@ const ACTION_LABELS: Record<string, string> = {
   user_create: "Create User",
   user_update: "Update User",
   user_delete: "Delete User",
+  "createtemplate (word)": "CreateTemplate (Word)",
+  "renamevariable (word)": "RenameVariable (Word)",
+  "deletevariable (word)": "DeleteVariable (Word)",
+  "ask (word)": "Ask (Word)",
 };
 
 function calcCost(input: number, output: number) {

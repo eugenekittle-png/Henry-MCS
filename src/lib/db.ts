@@ -776,7 +776,7 @@ export async function getAuditLogCount() {
   return result.rows[0].count as number;
 }
 
-const BILLABLE_ACTIONS = ["assist", "chat", "breakdown", "compare", "compare-diff", "compare_diff", "summarize", "ask", "breakdown-file"];
+const BILLABLE_ACTIONS = ["assist", "chat", "breakdown", "compare", "compare-diff", "compare_diff", "summarize", "ask", "breakdown-file", "createtemplate (word)", "ask (word)"];
 const AUTH_ACTIONS = [
   "login", "logout",
   "change-password",
