@@ -5,6 +5,7 @@ import Script from "next/script";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { parseContentAndCitations } from "@/lib/citations";
+import TemplateWizard from "@/components/TemplateWizard";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -16,6 +17,7 @@ export default function WordAddinPage() {
   const [officeReady, setOfficeReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"ask" | "template">("ask");
   // Login state
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -91,10 +93,14 @@ export default function WordAddinPage() {
     else localStorage.removeItem("addin_selectedMatter");
   }, [selectedMatter]);
 
-  // When opened from context menu (action=ask), read the selection into the textarea
+  // Set initial tab and pre-fill based on URL action param
   useEffect(() => {
     if (!officeReady) return;
     const params = new URLSearchParams(window.location.search);
+    if (params.get("action") === "template-wizard") {
+      setActiveTab("template");
+      return;
+    }
     if (params.get("action") !== "ask") return;
     (window as any).Word.run(async (context: any) => {
       const sel = context.document.getSelection();
@@ -592,7 +598,29 @@ export default function WordAddinPage() {
               </div>
             </div>
 
+            {/* ── Tab bar ── */}
+            <div className="flex border-b border-gray-200 flex-shrink-0 bg-white">
+              <button
+                onClick={() => setActiveTab("ask")}
+                className={`flex-1 py-2 text-xs font-medium transition-colors ${activeTab === "ask" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                Ask
+              </button>
+              <button
+                onClick={() => setActiveTab("template")}
+                className={`flex-1 py-2 text-xs font-medium transition-colors ${activeTab === "template" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                Make Template
+              </button>
+            </div>
+
+            {/* ── Template Wizard view ── */}
+            {activeTab === "template" && (
+              <TemplateWizard officeReady={officeReady} tokenRef={tokenRef} />
+            )}
+
             {/* ── Ask view ── */}
+            {activeTab === "ask" && (
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Prompt input — collapsed when a response is showing */}
                 {(askContent || askStreaming) ? (
@@ -771,6 +799,7 @@ export default function WordAddinPage() {
                   )}
                 </div>
             </div>
+            )}
           </div>
         )}
       </div>

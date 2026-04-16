@@ -61,6 +61,23 @@
                     <SourceLocation resid="TaskPane.Url" />
                   </Action>
                 </Control>
+
+                <Control xsi:type="Button" id="HenryMCSMakeTemplate">
+                  <Label resid="MakeTemplateLabel" />
+                  <Supertip>
+                    <Title resid="MakeTemplateLabel" />
+                    <Description resid="MakeTemplateDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>HenryMCSPane</TaskpaneId>
+                    <SourceLocation resid="TemplatePane.Url" />
+                  </Action>
+                </Control>
               </Group>
             </OfficeTab>
           </ExtensionPoint>
@@ -102,15 +119,18 @@
         <bt:Url id="Commands.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin-commands.html" />
         <bt:Url id="TaskPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin" />
         <bt:Url id="AskPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?action=ask" />
+        <bt:Url id="TemplatePane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?action=template-wizard" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel" DefaultValue="Henry MCS" />
         <bt:String id="OpenPaneLabel" DefaultValue="Henry MCS" />
         <bt:String id="AskLabel" DefaultValue="Henry MCS: Ask" />
+        <bt:String id="MakeTemplateLabel" DefaultValue="Make Template" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="OpenPaneDesc" DefaultValue="Open the Henry MCS AI assistant" />
         <bt:String id="AskDesc" DefaultValue="Ask Henry MCS about the selected text" />
+        <bt:String id="MakeTemplateDesc" DefaultValue="Convert this document into a reusable template by detecting and replacing variable data" />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
