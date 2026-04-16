@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
 
     logAction({
       username: session.email,
-      action: "TemplateDetect",
+      action: "CreateTemplate (Word)",
       clientNumber: clientNumber || null,
       matterNumber: matterNumber || null,
       details: { variablesFound: Array.isArray(variables) ? variables.length : 0, source: "word-addin" },

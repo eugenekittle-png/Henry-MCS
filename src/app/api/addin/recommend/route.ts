@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
 
         logAction({
           username: session.email,
-          action: "Ask",
+          action: "Ask (Word)",
           clientNumber: clientNumber || null,
           matterNumber: matterNumber || null,
           details: { source: "word-addin", prompt: prompt.slice(0, 200), client: client || undefined, matter: matter || undefined },

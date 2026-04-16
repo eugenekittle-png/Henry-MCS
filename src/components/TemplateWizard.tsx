@@ -22,6 +22,12 @@ interface ManageEntry {
   count: number;
 }
 
+interface UndoEntry {
+  name: string;
+  color: string;
+  texts: string[];
+}
+
 type Mode = "create" | "manage";
 type CreateStep = "idle" | "scanning" | "review" | "applying" | "done";
 type ManageStep = "idle" | "loading" | "list" | "saving";
@@ -73,6 +79,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
   const [manageStep, setManageStep] = useState<ManageStep>("idle");
   const [entries, setEntries] = useState<ManageEntry[]>([]);
   const [manageError, setManageError] = useState<string | null>(null);
+  const [lastDeleted, setLastDeleted] = useState<UndoEntry | null>(null);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -188,7 +195,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
       } catch { /* skip and continue */ }
     }
 
-    await auditLog("TemplateApply", toApply.map(v => v.name));
+    await auditLog("CreateTemplate (Word)", toApply.map(v => v.name));
     setAppliedCount(applied);
     setStep("done");
     setApplyProgress(null);
@@ -271,7 +278,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
         await context.sync();
       });
 
-      await auditLog("TemplateRename", dirty.map(e => `${e.name} → ${e.newName}`));
+      await auditLog("RenameVariable (Word)", dirty.map(e => `${e.name} → ${e.newName}`));
       // Reload the updated list
       await handleLoadControls();
     } catch {
@@ -282,25 +289,72 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
 
   const handleDeleteGroup = useCallback(async (name: string) => {
     try {
+      // Capture text + color before deleting so we can undo
+      const { texts, color } = await (window as any).Word.run(async (context: any) => {
+        const controls = context.document.contentControls;
+        controls.load("items");
+        await context.sync();
+        for (const cc of controls.items) cc.load("tag,title,text,color");
+        await context.sync();
+        const result: string[] = [];
+        let savedColor = "#767676";
+        for (const cc of controls.items) {
+          if ((cc.tag || cc.title) === name) {
+            result.push(cc.text);
+            savedColor = cc.color || savedColor;
+          }
+        }
+        return { texts: result, color: savedColor };
+      });
+
       await (window as any).Word.run(async (context: any) => {
         const controls = context.document.contentControls;
         controls.load("items");
         await context.sync();
         for (const cc of controls.items) cc.load("tag,title");
         await context.sync();
-
         for (const cc of controls.items) {
           if ((cc.tag || cc.title) === name) cc.delete(false);
         }
         await context.sync();
       });
 
-      await auditLog("TemplateDeleteVariable", [name]);
+      setLastDeleted({ name, color, texts });
+      await auditLog("DeleteVariable (Word)", [name]);
       setEntries(prev => prev.filter(e => e.name !== name));
     } catch {
       setManageError(`Failed to remove "${name}".`);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleUndo = useCallback(async () => {
+    if (!lastDeleted) return;
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const body = context.document.body;
+        for (const text of lastDeleted.texts) {
+          if (!text.trim()) continue;
+          const results = body.search(text, { matchCase: true, matchWholeWord: false });
+          results.load("items");
+          await context.sync();
+          for (const range of results.items) {
+            const cc = range.insertContentControl();
+            cc.title = lastDeleted.name;
+            cc.tag = lastDeleted.name;
+            cc.placeholderText = `{{${lastDeleted.name}}}`;
+            cc.appearance = "Tags";
+            cc.color = lastDeleted.color;
+          }
+          await context.sync();
+        }
+      });
+      setLastDeleted(null);
+      await handleLoadControls();
+    } catch {
+      setManageError("Undo failed — the text may have been modified.");
+      setLastDeleted(null);
+    }
+  }, [lastDeleted, handleLoadControls]);
 
   function updateEntry(index: number, newName: string) {
     setEntries(prev => prev.map((e, i) => i === index ? { ...e, newName } : e));
@@ -357,12 +411,17 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
               )}
               <button
                 onClick={handleScan}
-                disabled={!officeReady}
-                className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                disabled={!officeReady || !selectedClient || !selectedMatter}
+                className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Scan Document
               </button>
-              {!officeReady && <p className="text-xs text-gray-400 mt-2">Connecting to Word...</p>}
+              {(!selectedClient || !selectedMatter) && (
+                <p className="text-xs text-amber-600 mt-2">Select a client and matter above to continue.</p>
+              )}
+              {!officeReady && selectedClient && selectedMatter && (
+                <p className="text-xs text-gray-400 mt-2">Connecting to Word...</p>
+              )}
             </div>
           )}
 
@@ -497,6 +556,14 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
 
               {manageError && (
                 <div className="mx-3 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">{manageError}</div>
+              )}
+
+              {lastDeleted && (
+                <div className="mx-3 mt-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 flex-shrink-0">
+                  <p className="flex-1 text-xs text-amber-800 truncate">Deleted <span className="font-mono font-semibold">{lastDeleted.name}</span></p>
+                  <button onClick={handleUndo} className="text-xs font-semibold text-amber-700 hover:text-amber-900 whitespace-nowrap">Undo</button>
+                  <button onClick={() => setLastDeleted(null)} className="text-amber-400 hover:text-amber-600 text-xs leading-none">×</button>
+                </div>
               )}
 
               <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
