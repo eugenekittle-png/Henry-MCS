@@ -6,7 +6,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>e9f3c2b1-7a4d-4e8f-b2c5-1a9d3f7e2b6c</Id>
-  <Version>1.0.0.7</Version>
+  <Version>1.0.0.8</Version>
   <ProviderName>Henry MCS</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
@@ -38,9 +38,10 @@
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
 
-            <!-- Ask button stays on the Home tab -->
-            <OfficeTab id="TabHome">
-              <Group id="HenryMCSHomeGroup">
+            <CustomTab id="TabHenryMCS">
+
+              <!-- Henry MCS group: AI assistant -->
+              <Group id="HenryMCSAssistGroup">
                 <Label resid="GroupLabel" />
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16" />
@@ -64,12 +65,10 @@
                   </Action>
                 </Control>
               </Group>
-            </OfficeTab>
 
-            <!-- Make Template and future tools get their own tab -->
-            <CustomTab id="TabHenryMCS">
-              <Group id="HenryMCSTemplateGroup">
-                <Label resid="TemplateGroupLabel" />
+              <!-- Automation group: template and document automation tools -->
+              <Group id="HenryMCSAutomationGroup">
+                <Label resid="AutomationGroupLabel" />
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16" />
                   <bt:Image size="32" resid="Icon.32x32" />
@@ -92,6 +91,7 @@
                   </Action>
                 </Control>
               </Group>
+
               <Label resid="TabLabel" />
             </CustomTab>
 
@@ -139,7 +139,7 @@
       <bt:ShortStrings>
         <bt:String id="TabLabel" DefaultValue="Henry MCS" />
         <bt:String id="GroupLabel" DefaultValue="Henry MCS" />
-        <bt:String id="TemplateGroupLabel" DefaultValue="Templates" />
+        <bt:String id="AutomationGroupLabel" DefaultValue="Automation" />
         <bt:String id="OpenPaneLabel" DefaultValue="Henry MCS" />
         <bt:String id="AskLabel" DefaultValue="Henry MCS: Ask" />
         <bt:String id="MakeTemplateLabel" DefaultValue="Make Template" />
