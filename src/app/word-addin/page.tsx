@@ -616,7 +616,7 @@ export default function WordAddinPage() {
 
             {/* ── Template Wizard view ── */}
             {activeTab === "template" && (
-              <TemplateWizard officeReady={officeReady} tokenRef={tokenRef} />
+              <TemplateWizard officeReady={officeReady} tokenRef={tokenRef} selectedClient={selectedClient} selectedMatter={selectedMatter} />
             )}
 
             {/* ── Ask view ── */}

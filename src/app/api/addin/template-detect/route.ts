@@ -44,16 +44,25 @@ export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
 
   try {
-    const { text } = await req.json();
+    const { text, clientName, clientNumber, matterDescription, matterNumber } = await req.json();
     if (!text?.trim()) {
       return Response.json({ error: "Document text is required" }, { status: 400 });
     }
+
+    const contextHint = [
+      clientNumber && clientName ? `Client on file: ${clientName} (${clientNumber})` : null,
+      matterNumber && matterDescription ? `Matter on file: ${matterDescription} (${matterNumber})` : null,
+    ].filter(Boolean).join("\n");
+
+    const userContent = contextHint
+      ? `Context from the matter file:\n${contextHint}\n\nAnalyse this document and return the variable detection JSON array:\n\n${text}`
+      : `Analyse this document and return the variable detection JSON array:\n\n${text}`;
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 4096,
       system: DETECT_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: `Analyse this document and return the variable detection JSON array:\n\n${text}` }],
+      messages: [{ role: "user", content: userContent }],
     });
 
     const rawText = message.content
@@ -74,6 +83,8 @@ export async function POST(req: NextRequest) {
     logAction({
       username: session.email,
       action: "TemplateDetect",
+      clientNumber: clientNumber || null,
+      matterNumber: matterNumber || null,
       details: { variablesFound: Array.isArray(variables) ? variables.length : 0, source: "word-addin" },
       tokensInput: message.usage.input_tokens,
       tokensOutput: message.usage.output_tokens,

@@ -16,16 +16,22 @@ interface WizardVariable extends DetectedVariable {
   enabled: boolean;
 }
 
-type Step = "idle" | "scanning" | "review" | "applying" | "done";
+interface ManageEntry {
+  name: string;
+  newName: string;
+  count: number;
+}
+
+type Mode = "create" | "manage";
+type CreateStep = "idle" | "scanning" | "review" | "applying" | "done";
+type ManageStep = "idle" | "loading" | "list" | "saving";
+
+interface ClientRow { id: number; client_number: string; name: string }
+interface MatterRow { id: number; matter_number: string; description: string }
 
 const TYPE_LABELS: Record<string, string> = {
-  person: "Person",
-  org: "Organisation",
-  date: "Date",
-  amount: "Amount",
-  address: "Address",
-  reference: "Reference",
-  other: "Other",
+  person: "Person", org: "Organisation", date: "Date",
+  amount: "Amount", address: "Address", reference: "Reference", other: "Other",
 };
 
 const TYPE_COLOURS: Record<string, string> = {
@@ -38,22 +44,61 @@ const TYPE_COLOURS: Record<string, string> = {
   other: "bg-gray-100 text-gray-600",
 };
 
+function typeToColour(type: string): string {
+  const map: Record<string, string> = {
+    person: "#0078d4", org: "#8764b8", date: "#ca5010",
+    amount: "#107c10", address: "#e3008c", reference: "#767676", other: "#767676",
+  };
+  return map[type] ?? "#767676";
+}
+
 interface Props {
   officeReady: boolean;
   tokenRef: React.MutableRefObject<string | null>;
+  selectedClient: ClientRow | null;
+  selectedMatter: MatterRow | null;
 }
 
-export default function TemplateWizard({ officeReady, tokenRef }: Props) {
-  const [step, setStep] = useState<Step>("idle");
+export default function TemplateWizard({ officeReady, tokenRef, selectedClient, selectedMatter }: Props) {
+  const [mode, setMode] = useState<Mode>("create");
+
+  // Create mode
+  const [step, setStep] = useState<CreateStep>("idle");
   const [variables, setVariables] = useState<WizardVariable[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [applyProgress, setApplyProgress] = useState<{ current: number; total: number; label: string } | null>(null);
   const [appliedCount, setAppliedCount] = useState(0);
+
+  // Manage mode
+  const [manageStep, setManageStep] = useState<ManageStep>("idle");
+  const [entries, setEntries] = useState<ManageEntry[]>([]);
+  const [manageError, setManageError] = useState<string | null>(null);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  async function auditLog(action: string, variableNames: string[]) {
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      await fetch("/api/addin/template-log", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action,
+          variables: variableNames,
+          clientNumber: selectedClient?.client_number ?? null,
+          matterNumber: selectedMatter?.matter_number ?? null,
+        }),
+      });
+    } catch { /* non-blocking */ }
+  }
+
+  // ── Create mode ──────────────────────────────────────────────────────────
 
   const handleScan = useCallback(async () => {
     if (!officeReady) return;
     setStep("scanning");
-    setError(null);
+    setCreateError(null);
 
     let docText = "";
     try {
@@ -64,13 +109,13 @@ export default function TemplateWizard({ officeReady, tokenRef }: Props) {
         return body.text as string;
       });
     } catch {
-      setError("Could not read the document. Make sure a Word document is open.");
+      setCreateError("Could not read the document. Make sure a Word document is open.");
       setStep("idle");
       return;
     }
 
     if (!docText.trim()) {
-      setError("The document appears to be empty.");
+      setCreateError("The document appears to be empty.");
       setStep("idle");
       return;
     }
@@ -81,14 +126,20 @@ export default function TemplateWizard({ officeReady, tokenRef }: Props) {
       const res = await fetch("/api/addin/template-detect", {
         method: "POST",
         headers,
-        body: JSON.stringify({ text: docText }),
+        body: JSON.stringify({
+          text: docText,
+          clientName: selectedClient?.name ?? null,
+          clientNumber: selectedClient?.client_number ?? null,
+          matterDescription: selectedMatter?.description ?? null,
+          matterNumber: selectedMatter?.matter_number ?? null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
 
       const detected: DetectedVariable[] = data.variables ?? [];
       if (detected.length === 0) {
-        setError("No variables were detected. The document may already be a template, or it may not contain matter-specific data.");
+        setCreateError("No variables were detected. The document may already be a template, or it may not contain matter-specific data.");
         setStep("idle");
         return;
       }
@@ -96,17 +147,17 @@ export default function TemplateWizard({ officeReady, tokenRef }: Props) {
       setVariables(detected.map(v => ({ ...v, name: v.suggestedName, enabled: true })));
       setStep("review");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setCreateError(err instanceof Error ? err.message : "Something went wrong");
       setStep("idle");
     }
-  }, [officeReady, tokenRef]);
+  }, [officeReady, tokenRef, selectedClient, selectedMatter]);
 
   const handleApply = useCallback(async () => {
     const toApply = variables.filter(v => v.enabled && v.name.trim());
     if (toApply.length === 0) return;
 
     setStep("applying");
-    setError(null);
+    setCreateError(null);
     setApplyProgress({ current: 0, total: toApply.length, label: "" });
     let applied = 0;
 
@@ -117,13 +168,11 @@ export default function TemplateWizard({ officeReady, tokenRef }: Props) {
       try {
         await (window as any).Word.run(async (context: any) => {
           const body = context.document.body;
-
           for (const occurrence of variable.occurrences) {
             if (!occurrence.trim()) continue;
             const results = body.search(occurrence, { matchCase: false, matchWholeWord: false });
             results.load("items");
             await context.sync();
-
             for (const range of results.items) {
               const cc = range.insertContentControl();
               cc.title = variable.name;
@@ -136,33 +185,19 @@ export default function TemplateWizard({ officeReady, tokenRef }: Props) {
           }
         });
         applied++;
-      } catch {
-        // Skip this variable and continue
-      }
+      } catch { /* skip and continue */ }
     }
 
+    await auditLog("TemplateApply", toApply.map(v => v.name));
     setAppliedCount(applied);
     setStep("done");
     setApplyProgress(null);
-  }, [variables]);
+  }, [variables, selectedClient, selectedMatter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function typeToColour(type: string): string {
-    const map: Record<string, string> = {
-      person: "#0078d4",
-      org: "#8764b8",
-      date: "#ca5010",
-      amount: "#107c10",
-      address: "#e3008c",
-      reference: "#767676",
-      other: "#767676",
-    };
-    return map[type] ?? "#767676";
-  }
-
-  function handleReset() {
+  function handleCreateReset() {
     setStep("idle");
     setVariables([]);
-    setError(null);
+    setCreateError(null);
     setApplyProgress(null);
     setAppliedCount(0);
   }
@@ -171,147 +206,342 @@ export default function TemplateWizard({ officeReady, tokenRef }: Props) {
     setVariables(prev => prev.map((v, i) => i === index ? { ...v, ...patch } : v));
   }
 
+  // ── Manage mode ──────────────────────────────────────────────────────────
+
+  const handleLoadControls = useCallback(async () => {
+    if (!officeReady) return;
+    setManageStep("loading");
+    setManageError(null);
+
+    try {
+      const grouped = await (window as any).Word.run(async (context: any) => {
+        const controls = context.document.contentControls;
+        controls.load("items");
+        await context.sync();
+
+        if (controls.items.length === 0) return {};
+
+        for (const cc of controls.items) cc.load("title,tag");
+        await context.sync();
+
+        const map: Record<string, number> = {};
+        for (const cc of controls.items) {
+          const key = cc.tag || cc.title || "(unnamed)";
+          map[key] = (map[key] ?? 0) + 1;
+        }
+        return map;
+      });
+
+      const names = Object.keys(grouped);
+      if (names.length === 0) {
+        setManageError("No content controls found in this document. Use Create to add template fields first.");
+        setManageStep("idle");
+        return;
+      }
+
+      setEntries(names.sort().map(name => ({ name, newName: name, count: grouped[name] })));
+      setManageStep("list");
+    } catch {
+      setManageError("Could not read content controls. Make sure a Word document is open.");
+      setManageStep("idle");
+    }
+  }, [officeReady]);
+
+  const handleSaveRenames = useCallback(async () => {
+    const dirty = entries.filter(e => e.newName.trim() && e.newName !== e.name);
+    if (dirty.length === 0) return;
+
+    setManageStep("saving");
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const controls = context.document.contentControls;
+        controls.load("items");
+        await context.sync();
+        for (const cc of controls.items) cc.load("tag,title");
+        await context.sync();
+
+        for (const cc of controls.items) {
+          const match = dirty.find(e => (cc.tag || cc.title) === e.name);
+          if (match) {
+            cc.title = match.newName.trim();
+            cc.tag = match.newName.trim();
+            cc.placeholderText = `{{${match.newName.trim()}}}`;
+          }
+        }
+        await context.sync();
+      });
+
+      await auditLog("TemplateRename", dirty.map(e => `${e.name} → ${e.newName}`));
+      // Reload the updated list
+      await handleLoadControls();
+    } catch {
+      setManageError("Failed to apply renames.");
+      setManageStep("list");
+    }
+  }, [entries, handleLoadControls]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDeleteGroup = useCallback(async (name: string) => {
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const controls = context.document.contentControls;
+        controls.load("items");
+        await context.sync();
+        for (const cc of controls.items) cc.load("tag,title");
+        await context.sync();
+
+        for (const cc of controls.items) {
+          if ((cc.tag || cc.title) === name) cc.delete(false);
+        }
+        await context.sync();
+      });
+
+      await auditLog("TemplateDeleteVariable", [name]);
+      setEntries(prev => prev.filter(e => e.name !== name));
+    } catch {
+      setManageError(`Failed to remove "${name}".`);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function updateEntry(index: number, newName: string) {
+    setEntries(prev => prev.map((e, i) => i === index ? { ...e, newName } : e));
+  }
+
+  const dirtyCount = entries.filter(e => e.newName.trim() && e.newName !== e.name).length;
   const enabledCount = variables.filter(v => v.enabled).length;
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* ── Idle ── */}
-      {step === "idle" && (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
-          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-3">
-            <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <p className="text-sm font-semibold text-gray-800 mb-1">Document Template Wizard</p>
-          <p className="text-xs text-gray-500 mb-5 leading-relaxed">
-            Scans the open document for matter-specific data — names, dates, amounts, references — and converts them into reusable template fields.
-          </p>
-          {error && (
-            <div className="w-full mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 text-left">{error}</div>
-          )}
-          <button
-            onClick={handleScan}
-            disabled={!officeReady}
-            className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
-          >
-            Scan Document
-          </button>
-          {!officeReady && (
-            <p className="text-xs text-gray-400 mt-2">Connecting to Word...</p>
-          )}
-        </div>
-      )}
 
-      {/* ── Scanning ── */}
-      {step === "scanning" && (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
-          <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
-            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
-          </div>
-          <p className="text-xs text-gray-500">Analysing document for variables...</p>
-        </div>
-      )}
+      {/* Mode selector */}
+      <div className="flex border-b border-gray-200 bg-gray-50 flex-shrink-0">
+        <button
+          onClick={() => setMode("create")}
+          className={`flex-1 py-1.5 text-xs font-medium transition-colors ${mode === "create" ? "bg-white text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          Create
+        </button>
+        <button
+          onClick={() => { setMode("manage"); if (manageStep === "idle") handleLoadControls(); }}
+          className={`flex-1 py-1.5 text-xs font-medium transition-colors ${mode === "manage" ? "bg-white text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          Manage
+        </button>
+      </div>
 
-      {/* ── Review ── */}
-      {step === "review" && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-            <div>
-              <p className="text-xs font-semibold text-gray-800">{variables.length} variables detected</p>
-              <p className="text-xs text-gray-500">{enabledCount} selected for replacement</p>
-            </div>
-            <button onClick={handleReset} className="text-xs text-gray-400 hover:text-gray-600">Rescan</button>
-          </div>
+      {/* ── CREATE MODE ─────────────────────────────────────────────────── */}
+      {mode === "create" && (
+        <>
+          {step === "idle" && (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-3">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-gray-800 mb-1">Document Template Wizard</p>
+              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                Scans the open document for matter-specific data — names, dates, amounts, references — and converts them into reusable template fields.
+              </p>
 
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
-            {variables.map((v, i) => (
-              <div
-                key={i}
-                className={`border rounded-lg px-3 py-2 transition-colors ${v.enabled ? "bg-white border-gray-200" : "bg-gray-50 border-gray-100 opacity-60"}`}
+              {(selectedClient || selectedMatter) && (
+                <div className="w-full mb-4 text-left bg-blue-50 border border-blue-200 rounded px-3 py-2 space-y-0.5">
+                  {selectedClient && <p className="text-xs text-blue-800 truncate">{selectedClient.client_number} — {selectedClient.name}</p>}
+                  {selectedMatter && <p className="text-xs text-blue-700 truncate">{selectedMatter.matter_number} — {selectedMatter.description}</p>}
+                </div>
+              )}
+
+              {createError && (
+                <div className="w-full mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 text-left">{createError}</div>
+              )}
+              <button
+                onClick={handleScan}
+                disabled={!officeReady}
+                className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
               >
-                <div className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={v.enabled}
-                    onChange={e => updateVariable(i, { enabled: e.target.checked })}
-                    className="mt-0.5 flex-shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <input
-                        type="text"
-                        value={v.name}
-                        onChange={e => updateVariable(i, { name: e.target.value })}
-                        disabled={!v.enabled}
-                        className="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs font-mono text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-50"
-                      />
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${TYPE_COLOURS[v.type]}`}>
-                        {TYPE_LABELS[v.type]}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 leading-snug mb-1">{v.description}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {v.occurrences.map((occ, j) => (
-                        <span key={j} className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-mono truncate max-w-full">
-                          {occ}
-                        </span>
-                      ))}
+                Scan Document
+              </button>
+              {!officeReady && <p className="text-xs text-gray-400 mt-2">Connecting to Word...</p>}
+            </div>
+          )}
+
+          {step === "scanning" && (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
+              <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+              </div>
+              <p className="text-xs text-gray-500">Analysing document for variables...</p>
+            </div>
+          )}
+
+          {step === "review" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                <div>
+                  <p className="text-xs font-semibold text-gray-800">{variables.length} variables detected</p>
+                  <p className="text-xs text-gray-500">{enabledCount} selected for replacement</p>
+                </div>
+                <button onClick={handleCreateReset} className="text-xs text-gray-400 hover:text-gray-600">Rescan</button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+                {variables.map((v, i) => (
+                  <div key={i} className={`border rounded-lg px-3 py-2 transition-colors ${v.enabled ? "bg-white border-gray-200" : "bg-gray-50 border-gray-100 opacity-60"}`}>
+                    <div className="flex items-start gap-2">
+                      <input type="checkbox" checked={v.enabled} onChange={e => updateVariable(i, { enabled: e.target.checked })} className="mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <input
+                            type="text" value={v.name}
+                            onChange={e => updateVariable(i, { name: e.target.value })}
+                            disabled={!v.enabled}
+                            className="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs font-mono text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-50"
+                          />
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${TYPE_COLOURS[v.type]}`}>{TYPE_LABELS[v.type]}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 leading-snug mb-1">{v.description}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {v.occurrences.map((occ, j) => (
+                            <span key={j} className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-mono truncate max-w-full">{occ}</span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+              <div className="px-3 py-2 border-t border-gray-100 flex-shrink-0">
+                <button
+                  onClick={handleApply} disabled={enabledCount === 0}
+                  className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Insert {enabledCount} Content Control{enabledCount !== 1 ? "s" : ""}
+                </button>
+              </div>
+            </div>
+          )}
 
-          <div className="px-3 py-2 border-t border-gray-100 flex-shrink-0">
-            <button
-              onClick={handleApply}
-              disabled={enabledCount === 0}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Insert {enabledCount} Content Control{enabledCount !== 1 ? "s" : ""}
-            </button>
-          </div>
-        </div>
+          {step === "applying" && applyProgress && (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6">
+              <p className="text-xs font-semibold text-gray-800 mb-1">Applying template fields...</p>
+              <p className="text-xs text-gray-500 mb-3 truncate max-w-full">{applyProgress.label}</p>
+              <div className="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+                <div className="bg-blue-600 h-1.5 rounded-full transition-all" style={{ width: `${(applyProgress.current / applyProgress.total) * 100}%` }} />
+              </div>
+              <p className="text-xs text-gray-400">{applyProgress.current} / {applyProgress.total}</p>
+            </div>
+          )}
+
+          {step === "done" && (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mb-3">
+                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-gray-800 mb-1">Template ready</p>
+              <p className="text-xs text-gray-500 mb-4">
+                {appliedCount} variable{appliedCount !== 1 ? "s" : ""} inserted as content controls.
+                Save the document as a <strong>.dotx</strong> template to reuse it.
+              </p>
+              <button
+                onClick={() => { handleCreateReset(); setMode("manage"); handleLoadControls(); }}
+                className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 mb-2"
+              >
+                Review Variables
+              </button>
+              <button onClick={handleCreateReset} className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-xs font-medium">
+                Scan Another Document
+              </button>
+            </div>
+          )}
+        </>
       )}
 
-      {/* ── Applying ── */}
-      {step === "applying" && applyProgress && (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-6">
-          <p className="text-xs font-semibold text-gray-800 mb-1">Applying template fields...</p>
-          <p className="text-xs text-gray-500 mb-3 truncate max-w-full">{applyProgress.label}</p>
-          <div className="w-full bg-gray-200 rounded-full h-1.5 mb-1">
-            <div
-              className="bg-blue-600 h-1.5 rounded-full transition-all"
-              style={{ width: `${(applyProgress.current / applyProgress.total) * 100}%` }}
-            />
-          </div>
-          <p className="text-xs text-gray-400">{applyProgress.current} / {applyProgress.total}</p>
-        </div>
-      )}
+      {/* ── MANAGE MODE ─────────────────────────────────────────────────── */}
+      {mode === "manage" && (
+        <>
+          {(manageStep === "idle" || manageStep === "loading") && (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
+              {manageStep === "loading" ? (
+                <>
+                  <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+                  </div>
+                  <p className="text-xs text-gray-500">Reading content controls...</p>
+                </>
+              ) : (
+                <>
+                  {manageError && <div className="w-full mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 text-left">{manageError}</div>}
+                  <button onClick={handleLoadControls} disabled={!officeReady} className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50">
+                    Load Variables
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
-      {/* ── Done ── */}
-      {step === "done" && (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
-          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mb-3">
-            <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <p className="text-sm font-semibold text-gray-800 mb-1">Template ready</p>
-          <p className="text-xs text-gray-500 mb-5">
-            {appliedCount} variable{appliedCount !== 1 ? "s" : ""} inserted as content controls. Save the document as a <strong>.dotx</strong> template to reuse it.
-          </p>
-          <button
-            onClick={handleReset}
-            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-xs font-medium"
-          >
-            Scan Another Document
-          </button>
-        </div>
+          {(manageStep === "list" || manageStep === "saving") && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                <div>
+                  <p className="text-xs font-semibold text-gray-800">{entries.length} variable{entries.length !== 1 ? "s" : ""} in document</p>
+                  <p className="text-xs text-gray-500">Rename to merge. Delete removes the field, keeps text.</p>
+                </div>
+                <button onClick={handleLoadControls} className="text-xs text-gray-400 hover:text-gray-600" disabled={manageStep === "saving"}>Reload</button>
+              </div>
+
+              {manageError && (
+                <div className="mx-3 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">{manageError}</div>
+              )}
+
+              <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+                {entries.map((entry, i) => (
+                  <div key={entry.name} className="border border-gray-200 rounded-lg px-3 py-2 bg-white">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <input
+                          type="text"
+                          value={entry.newName}
+                          onChange={e => updateEntry(i, e.target.value)}
+                          disabled={manageStep === "saving"}
+                          className={`w-full border rounded px-2 py-0.5 text-xs font-mono text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 ${entry.newName !== entry.name ? "border-blue-400 bg-blue-50" : "border-gray-200"}`}
+                        />
+                        <p className="text-xs text-gray-400 mt-0.5">{entry.count} occurrence{entry.count !== 1 ? "s" : ""}{entry.newName !== entry.name ? ` · will rename from "${entry.name}"` : ""}</p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteGroup(entry.name)}
+                        disabled={manageStep === "saving"}
+                        className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-30 flex-shrink-0"
+                        title={`Remove all "${entry.name}" controls`}
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {dirtyCount > 0 && (
+                <div className="px-3 py-2 border-t border-gray-100 flex-shrink-0">
+                  <button
+                    onClick={handleSaveRenames}
+                    disabled={manageStep === "saving"}
+                    className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {manageStep === "saving" ? "Saving..." : `Apply ${dirtyCount} Rename${dirtyCount !== 1 ? "s" : ""}`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
