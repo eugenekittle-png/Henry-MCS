@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -16,6 +16,7 @@ interface WizardVariable extends DetectedVariable {
   enabled: boolean;
   isManual: boolean;
   isFromLibrary: boolean;
+  showLibraryPicker: boolean;
 }
 
 interface LibraryVariable {
@@ -125,7 +126,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
   }, [tokenRef]);
 
   // Load library once on mount
-  useState(() => { loadLibrary(); });
+  useEffect(() => { loadLibrary(); }, [loadLibrary]);
 
   function normalize(s: string) {
     return s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -195,6 +196,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
           enabled: true,
           isManual: match ? match.is_manual === 1 : false,
           isFromLibrary: !!match,
+          showLibraryPicker: false,
         };
       }));
       setStep("review");
@@ -532,6 +534,48 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                           }
                           <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${TYPE_COLOURS[v.type]}`}>{TYPE_LABELS[v.type]}</span>
                         </div>
+
+                        {/* Library picker */}
+                        {library.length > 0 && !v.isFromLibrary && v.enabled && (
+                          <div className="mb-1">
+                            {v.showLibraryPicker ? (
+                              <div className="flex items-center gap-1">
+                                <select
+                                  autoFocus
+                                  className="flex-1 border border-blue-300 rounded px-2 py-0.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                                  defaultValue=""
+                                  onChange={e => {
+                                    const picked = library.find(l => l.name === e.target.value);
+                                    if (picked) {
+                                      updateVariable(i, {
+                                        name: picked.name,
+                                        isFromLibrary: true,
+                                        isManual: picked.is_manual === 1,
+                                        showLibraryPicker: false,
+                                      });
+                                    } else {
+                                      updateVariable(i, { showLibraryPicker: false });
+                                    }
+                                  }}
+                                >
+                                  <option value="">— pick a library variable —</option>
+                                  {library.map(l => (
+                                    <option key={l.name} value={l.name}>{l.name}</option>
+                                  ))}
+                                </select>
+                                <button onClick={() => updateVariable(i, { showLibraryPicker: false })} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => updateVariable(i, { showLibraryPicker: true })}
+                                className="text-xs text-blue-600 hover:text-blue-800"
+                              >
+                                Map to existing library variable
+                              </button>
+                            )}
+                          </div>
+                        )}
+
                         <p className="text-xs text-gray-500 leading-snug mb-1">{v.description}</p>
                         <div className="flex flex-wrap gap-1 mb-1.5">
                           {v.occurrences.map((occ, j) => (
