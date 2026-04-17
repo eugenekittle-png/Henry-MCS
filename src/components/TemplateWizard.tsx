@@ -558,7 +558,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
           const name = cc.tag || cc.title || "";
           const match = toFill.find(v => v.name === name);
           if (match) {
-            cc.getBody().insertText(match.value, "Replace");
+            cc.insertText(match.value, "Replace");
             filled++;
           }
         }
