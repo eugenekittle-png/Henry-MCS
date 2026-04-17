@@ -41,9 +41,18 @@ interface UndoEntry {
   texts: string[];
 }
 
-type Mode = "create" | "manage";
+type Mode = "create" | "manage" | "fill";
 type CreateStep = "idle" | "scanning" | "review" | "applying" | "done";
 type ManageStep = "idle" | "loading" | "list" | "saving";
+type FillStep = "idle" | "loading" | "form" | "filling" | "done";
+
+interface FillVariable {
+  name: string;
+  type: string;
+  value: string;
+  isAutoFilled: boolean;
+  isManual: boolean;
+}
 
 interface ClientRow { id: number; client_number: string; name: string }
 interface MatterRow { id: number; matter_number: string; description: string }
@@ -96,6 +105,12 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
   const [entries, setEntries] = useState<ManageEntry[]>([]);
   const [manageError, setManageError] = useState<string | null>(null);
   const [lastDeleted, setLastDeleted] = useState<UndoEntry | null>(null);
+
+  // Fill mode
+  const [fillStep, setFillStep] = useState<FillStep>("idle");
+  const [fillVars, setFillVars] = useState<FillVariable[]>([]);
+  const [fillError, setFillError] = useState<string | null>(null);
+  const [filledCount, setFilledCount] = useState(0);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -466,6 +481,100 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     setEntries(prev => prev.map((e, i) => i === index ? { ...e, newName } : e));
   }
 
+  // ── Fill mode ─────────────────────────────────────────────────────────────
+
+  function getAutoFill(name: string): string | null {
+    const n = normalize(name);
+    if (["clientname", "clientfullname", "clientorg", "clientorganisation"].includes(n) || n.startsWith("clientname"))
+      return selectedClient?.name ?? null;
+    if (["clientnumber", "clientno", "clientcode"].includes(n))
+      return selectedClient?.client_number ?? null;
+    if (["mattername", "matterdescription", "matterdesc", "mattersubject", "matterdescription"].includes(n) || n.startsWith("mattername"))
+      return selectedMatter?.description ?? null;
+    if (["matternumber", "matterno", "mattercode"].includes(n))
+      return selectedMatter?.matter_number ?? null;
+    return null;
+  }
+
+  const handleLoadFill = useCallback(async () => {
+    if (!officeReady) return;
+    setFillStep("loading");
+    setFillError(null);
+    try {
+      const names: string[] = await (window as any).Word.run(async (context: any) => {
+        const controls = context.document.contentControls;
+        controls.load("items");
+        await context.sync();
+        if (controls.items.length === 0) return [];
+        for (const cc of controls.items) cc.load("tag,title");
+        await context.sync();
+        const seen = new Set<string>();
+        const result: string[] = [];
+        for (const cc of controls.items) {
+          const n = cc.tag || cc.title || "";
+          if (n && !seen.has(n)) { seen.add(n); result.push(n); }
+        }
+        return result.sort();
+      });
+
+      if (names.length === 0) {
+        setFillError("No content controls found. Use Create to build a template first.");
+        setFillStep("idle");
+        return;
+      }
+
+      setFillVars(names.map(name => {
+        const libMatch = library.find(l => normalize(l.name) === normalize(name));
+        const autoVal = getAutoFill(name);
+        return {
+          name,
+          type: libMatch?.type ?? "other",
+          value: autoVal ?? "",
+          isAutoFilled: !!autoVal,
+          isManual: libMatch ? libMatch.is_manual === 1 : false,
+        };
+      }));
+      setFillStep("form");
+    } catch {
+      setFillError("Could not read document. Make sure a Word document is open.");
+      setFillStep("idle");
+    }
+  }, [officeReady, library, selectedClient, selectedMatter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleFillDocument = useCallback(async () => {
+    const toFill = fillVars.filter(v => v.value.trim());
+    if (toFill.length === 0) return;
+    setFillStep("filling");
+    setFillError(null);
+    let filled = 0;
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const controls = context.document.contentControls;
+        controls.load("items");
+        await context.sync();
+        for (const cc of controls.items) cc.load("tag,title");
+        await context.sync();
+        for (const cc of controls.items) {
+          const name = cc.tag || cc.title || "";
+          const match = toFill.find(v => v.name === name);
+          if (match) { cc.insertText(match.value, "Replace"); filled++; }
+        }
+        await context.sync();
+      });
+
+      await auditLog("FillTemplate (Word)", toFill.map(v => v.name));
+      setFilledCount(filled);
+      setFillStep("done");
+    } catch {
+      setFillError("Failed to fill document. Please try again.");
+      setFillStep("form");
+    }
+  }, [fillVars]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function updateFillVar(index: number, value: string) {
+    setFillVars(prev => prev.map((v, i) => i === index ? { ...v, value, isAutoFilled: false } : v));
+  }
+
   const dirtyCount = entries.filter(e => e.newName.trim() && e.newName !== e.name).length;
   const enabledCount = variables.filter(v => v.enabled).length;
 
@@ -487,6 +596,12 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
           className={`flex-1 py-1.5 text-xs font-medium transition-colors ${mode === "manage" ? "bg-white text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
         >
           Manage
+        </button>
+        <button
+          onClick={() => { setMode("fill"); if (fillStep === "idle") handleLoadFill(); }}
+          className={`flex-1 py-1.5 text-xs font-medium transition-colors ${mode === "fill" ? "bg-white text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          Fill
         </button>
       </div>
 
@@ -800,6 +915,126 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                   </button>
                 </div>
               )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── FILL MODE ───────────────────────────────────────────────────── */}
+      {mode === "fill" && (
+        <>
+          {(fillStep === "idle" || fillStep === "loading") && (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
+              {fillStep === "loading" ? (
+                <>
+                  <div className="flex items-center gap-2 text-gray-400 text-xs mb-2">
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+                  </div>
+                  <p className="text-xs text-gray-500">Reading template fields...</p>
+                </>
+              ) : (
+                <>
+                  {fillError && <div className="w-full mb-4 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 text-left">{fillError}</div>}
+                  <button
+                    onClick={handleLoadFill}
+                    disabled={!officeReady || !selectedClient || !selectedMatter}
+                    className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Load Template Fields
+                  </button>
+                  {(!selectedClient || !selectedMatter) && (
+                    <p className="text-xs text-gray-400 mt-2">Select a client and matter first</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {(fillStep === "form" || fillStep === "filling") && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                <div>
+                  <p className="text-xs font-semibold text-gray-800">{fillVars.length} field{fillVars.length !== 1 ? "s" : ""} to fill</p>
+                  <p className="text-xs text-gray-500">
+                    {fillVars.filter(v => v.isAutoFilled).length} auto-filled · {fillVars.filter(v => !v.value.trim()).length} empty
+                  </p>
+                </div>
+                <button onClick={handleLoadFill} className="text-xs text-gray-400 hover:text-gray-600" disabled={fillStep === "filling"}>Reload</button>
+              </div>
+
+              {fillError && (
+                <div className="mx-3 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">{fillError}</div>
+              )}
+
+              <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+                {fillVars.map((v, i) => (
+                  <div key={v.name} className="border border-gray-200 rounded-lg px-3 py-2 bg-white">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <span className="text-xs font-mono font-semibold text-gray-800 flex-1 truncate">{v.name}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${TYPE_COLOURS[v.type] ?? TYPE_COLOURS.other}`}>
+                        {TYPE_LABELS[v.type] ?? "Other"}
+                      </span>
+                      {v.isAutoFilled && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 flex-shrink-0">Auto</span>
+                      )}
+                      {v.isManual && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">Manual</span>
+                      )}
+                    </div>
+                    {v.type === "address" ? (
+                      <textarea
+                        rows={2}
+                        value={v.value}
+                        onChange={e => updateFillVar(i, e.target.value)}
+                        disabled={fillStep === "filling"}
+                        placeholder={`Enter ${v.name}...`}
+                        className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 resize-none"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={v.value}
+                        onChange={e => updateFillVar(i, e.target.value)}
+                        disabled={fillStep === "filling"}
+                        placeholder={`Enter ${v.name}...`}
+                        className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="px-3 py-2 border-t border-gray-100 flex-shrink-0">
+                <button
+                  onClick={handleFillDocument}
+                  disabled={fillStep === "filling" || fillVars.every(v => !v.value.trim())}
+                  className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {fillStep === "filling" ? "Filling..." : `Fill ${fillVars.filter(v => v.value.trim()).length} Field${fillVars.filter(v => v.value.trim()).length !== 1 ? "s" : ""}`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {fillStep === "done" && (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mb-3">
+                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-gray-800 mb-1">Document filled</p>
+              <p className="text-xs text-gray-500 mb-4">
+                {filledCount} field{filledCount !== 1 ? "s" : ""} populated. Save a copy to preserve the original template.
+              </p>
+              <button
+                onClick={() => { setFillStep("idle"); setFillVars([]); setFilledCount(0); setFillError(null); }}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-lg text-xs font-medium"
+              >
+                Fill Another
+              </button>
             </div>
           )}
         </>
