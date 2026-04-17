@@ -266,6 +266,25 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     setApplyProgress({ current: 0, total: toApply.length, label: "" });
     let applied = 0;
 
+    // Pre-pass: remove existing controls for these tags so re-applying is idempotent.
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const tagSet = new Set(toApply.map(v => v.name));
+        const existing = context.document.contentControls;
+        existing.load("items");
+        await context.sync();
+        for (const cc of existing.items) cc.load("tag");
+        await context.sync();
+        for (const cc of existing.items) {
+          if (tagSet.has(cc.tag)) {
+            cc.cannotDelete = false;
+            cc.delete(true); // remove wrapper, keep text
+          }
+        }
+        await context.sync();
+      });
+    } catch { /* non-blocking */ }
+
     for (let i = 0; i < toApply.length; i++) {
       const variable = toApply[i];
       setApplyProgress({ current: i + 1, total: toApply.length, label: variable.name });
@@ -278,7 +297,12 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
             const results = body.search(occurrence, { matchCase: false, matchWholeWord: false });
             results.load("items");
             await context.sync();
+            // Load parent control info so we can skip ranges already inside a control
+            // (prevents nesting when one occurrence text is a substring of another).
+            for (const range of results.items) range.load("parentContentControlOrNullObject");
+            await context.sync();
             for (const range of results.items) {
+              if (!range.parentContentControlOrNullObject.isNullObject) continue; // skip nested
               const cc = range.insertContentControl();
               cc.title = variable.name;
               cc.tag = variable.name;
@@ -549,18 +573,37 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     let filled = 0;
     const errors: string[] = [];
 
-    // Process each variable in its own Word.run to avoid position-shift
-    // conflicts when multiple controls are deleted in one batch.
+    // Process each variable in its own Word.run to avoid position-shift conflicts.
+    // Three-phase per variable: unlock → replace content → remove wrapper.
     for (const match of toFill) {
       try {
         await (window as any).Word.run(async (context: any) => {
-          const ccs = context.document.contentControls.getByTag(match.name);
-          ccs.load("items");
+          // Phase 1: unlock edit/delete protection
+          const ccs1 = context.document.contentControls.getByTag(match.name);
+          ccs1.load("items");
           await context.sync();
-          for (const cc of ccs.items) {
-            // Insert value before the control, then delete control + original content.
-            cc.insertText(match.value, "Before");
-            cc.delete(false);
+          if (ccs1.items.length === 0) return;
+          for (const cc of ccs1.items) {
+            cc.cannotEdit = false;
+            cc.cannotDelete = false;
+          }
+          await context.sync();
+
+          // Phase 2: replace content inside each control with the filled value
+          const ccs2 = context.document.contentControls.getByTag(match.name);
+          ccs2.load("items");
+          await context.sync();
+          for (const cc of ccs2.items) {
+            cc.insertText(match.value, "Replace");
+          }
+          await context.sync();
+
+          // Phase 3: remove control wrapper, keeping the filled text
+          const ccs3 = context.document.contentControls.getByTag(match.name);
+          ccs3.load("items");
+          await context.sync();
+          for (const cc of ccs3.items) {
+            cc.delete(true); // true = keep content (our filled value)
           }
           await context.sync();
         });
