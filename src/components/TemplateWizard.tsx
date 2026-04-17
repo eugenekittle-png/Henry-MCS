@@ -573,36 +573,41 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     let filled = 0;
     const errors: string[] = [];
 
+    // Pre-pass: unlock ALL content controls in the document so that nested
+    // controls (inner control inside a still-locked outer control) can be edited.
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const allCCs = context.document.contentControls;
+        allCCs.load("items");
+        await context.sync();
+        for (const cc of allCCs.items) {
+          cc.cannotEdit = false;
+          cc.cannotDelete = false;
+        }
+        await context.sync();
+      });
+    } catch { /* non-blocking */ }
+
     // Process each variable in its own Word.run to avoid position-shift conflicts.
-    // Three-phase per variable: unlock → replace content → remove wrapper.
+    // Two-phase per variable: replace content → remove wrapper.
     for (const match of toFill) {
       try {
         await (window as any).Word.run(async (context: any) => {
-          // Phase 1: unlock edit/delete protection
+          // Phase 1: replace content inside each control with the filled value
           const ccs1 = context.document.contentControls.getByTag(match.name);
           ccs1.load("items");
           await context.sync();
           if (ccs1.items.length === 0) return;
           for (const cc of ccs1.items) {
-            cc.cannotEdit = false;
-            cc.cannotDelete = false;
+            cc.getRange("Content").insertText(match.value, "Replace");
           }
           await context.sync();
 
-          // Phase 2: replace content inside each control with the filled value
+          // Phase 2: remove control wrapper, keeping the filled text
           const ccs2 = context.document.contentControls.getByTag(match.name);
           ccs2.load("items");
           await context.sync();
           for (const cc of ccs2.items) {
-            cc.insertText(match.value, "Replace");
-          }
-          await context.sync();
-
-          // Phase 3: remove control wrapper, keeping the filled text
-          const ccs3 = context.document.contentControls.getByTag(match.name);
-          ccs3.load("items");
-          await context.sync();
-          for (const cc of ccs3.items) {
             cc.delete(true); // true = keep content (our filled value)
           }
           await context.sync();
