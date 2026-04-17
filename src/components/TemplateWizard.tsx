@@ -240,7 +240,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
       setCreateError(err instanceof Error ? err.message : "Something went wrong");
       setStep("idle");
     }
-  }, [officeReady, tokenRef, selectedClient, selectedMatter]);
+  }, [officeReady, tokenRef, selectedClient, selectedMatter, library]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleApply = useCallback(async () => {
     const toApply = variables.filter(v => v.enabled && v.name.trim());
