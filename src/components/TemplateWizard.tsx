@@ -557,7 +557,10 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
         for (const cc of controls.items) {
           const name = cc.tag || cc.title || "";
           const match = toFill.find(v => v.name === name);
-          if (match) { cc.insertText(match.value, "Replace"); filled++; }
+          if (match) {
+            cc.getBody().insertText(match.value, "Replace");
+            filled++;
+          }
         }
         await context.sync();
       });
@@ -565,8 +568,8 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
       await auditLog("FillTemplate (Word)", toFill.map(v => v.name));
       setFilledCount(filled);
       setFillStep("done");
-    } catch {
-      setFillError("Failed to fill document. Please try again.");
+    } catch (err) {
+      setFillError(`Fill failed: ${err instanceof Error ? err.message : String(err)}`);
       setFillStep("form");
     }
   }, [fillVars]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -659,14 +662,30 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
 
           {step === "review" && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-                <div>
+              <div className="px-3 py-2 border-b border-gray-100 flex-shrink-0">
+                <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-semibold text-gray-800">{variables.length} variables detected</p>
+                  <button onClick={handleCreateReset} className="text-xs text-gray-400 hover:text-gray-600">Rescan</button>
+                </div>
+                <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500">
                     {variables.filter(v => v.isFromLibrary).length} matched · {variables.filter(v => v.isSuggested).length} suggested · {variables.filter(v => !v.isFromLibrary && !v.isSuggested).length} new
                   </p>
+                  {variables.some(v => v.isSuggested) && (
+                    <button
+                      onClick={() => {
+                        setVariables(prev => prev.map(v =>
+                          v.isSuggested && v.suggestedMatch
+                            ? { ...v, name: v.suggestedMatch.name, isFromLibrary: true, isManual: v.suggestedMatch.is_manual === 1, isSuggested: false, suggestedMatch: null }
+                            : v
+                        ));
+                      }}
+                      className="text-xs text-amber-700 hover:text-amber-900 font-medium whitespace-nowrap"
+                    >
+                      Accept all suggested
+                    </button>
+                  )}
                 </div>
-                <button onClick={handleCreateReset} className="text-xs text-gray-400 hover:text-gray-600">Rescan</button>
               </div>
               <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
                 {variables.map((v, i) => (
