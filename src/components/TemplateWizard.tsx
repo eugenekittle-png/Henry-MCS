@@ -547,33 +547,37 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     setFillStep("filling");
     setFillError(null);
     let filled = 0;
-    try {
-      await (window as any).Word.run(async (context: any) => {
-        const controls = context.document.contentControls;
-        controls.load("items");
-        await context.sync();
-        for (const cc of controls.items) cc.load("tag,title");
-        await context.sync();
-        for (const cc of controls.items) {
-          const name = cc.tag || cc.title || "";
-          const match = toFill.find(v => v.name === name);
-          if (match) {
-            // Insert new value before the control in document flow,
-            // then delete the control (and its original content).
-            cc.insertText(match.value, "Before");
-            cc.delete(true);
-            filled++;
-          }
-        }
-        await context.sync();
-      });
+    const errors: string[] = [];
 
-      await auditLog("FillTemplate (Word)", toFill.map(v => v.name));
-      setFilledCount(filled);
-      setFillStep("done");
-    } catch (err) {
-      setFillError(`Fill failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Process each variable in its own Word.run to avoid position-shift
+    // conflicts when multiple controls are deleted in one batch.
+    for (const match of toFill) {
+      try {
+        await (window as any).Word.run(async (context: any) => {
+          const ccs = context.document.contentControls.getByTag(match.name);
+          ccs.load("items");
+          await context.sync();
+          for (const cc of ccs.items) {
+            // Insert value before the control, then delete control + original content.
+            cc.insertText(match.value, "Before");
+            cc.delete(false);
+          }
+          await context.sync();
+        });
+        filled++;
+      } catch (err) {
+        errors.push(`${match.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    await auditLog("FillTemplate (Word)", toFill.map(v => v.name));
+    setFilledCount(filled);
+    if (errors.length > 0 && filled === 0) {
+      setFillError(`Fill failed: ${errors[0]}`);
       setFillStep("form");
+    } else {
+      if (errors.length > 0) setFillError(`${filled} filled, ${errors.length} skipped.`);
+      setFillStep("done");
     }
   }, [fillVars]); // eslint-disable-line react-hooks/exhaustive-deps
 
