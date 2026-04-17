@@ -558,7 +558,10 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
           const name = cc.tag || cc.title || "";
           const match = toFill.find(v => v.name === name);
           if (match) {
-            cc.insertText(match.value, "Replace");
+            // Insert new value before the control in document flow,
+            // then delete the control (and its original content).
+            cc.insertText(match.value, "Before");
+            cc.delete(true);
             filled++;
           }
         }
@@ -1046,7 +1049,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
               </div>
               <p className="text-sm font-semibold text-gray-800 mb-1">Document filled</p>
               <p className="text-xs text-gray-500 mb-4">
-                {filledCount} field{filledCount !== 1 ? "s" : ""} populated. Save a copy to preserve the original template.
+                {filledCount} field{filledCount !== 1 ? "s" : ""} filled. Content controls replaced with plain text — save as a new <strong>.docx</strong> to preserve the original template.
               </p>
               <button
                 onClick={() => { setFillStep("idle"); setFillVars([]); setFilledCount(0); setFillError(null); }}
