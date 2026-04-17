@@ -26,13 +26,17 @@ interface LibraryVariable {
   name: string;
   type: string;
   description: string | null;
+  format: string | null;
   is_manual: number;
 }
 
 interface ManageEntry {
+  id: number | null;
   name: string;
   newName: string;
   count: number;
+  type: string;
+  format: string | null;
 }
 
 interface UndoEntry {
@@ -49,6 +53,7 @@ type FillStep = "idle" | "loading" | "form" | "filling" | "done";
 interface FillVariable {
   name: string;
   type: string;
+  format: string | null;
   value: string;
   isAutoFilled: boolean;
   isManual: boolean;
@@ -56,6 +61,95 @@ interface FillVariable {
 
 interface ClientRow { id: number; client_number: string; name: string }
 interface MatterRow { id: number; matter_number: string; description: string }
+
+// ── Format options (shown in Manage tab per variable type) ───────────────────
+
+const FORMAT_OPTIONS: Record<string, { value: string; label: string; example: string }[]> = {
+  date: [
+    { value: "as-entered", label: "As entered", example: "" },
+    { value: "long",       label: "Long form",          example: "August 12, 2026" },
+    { value: "dmy",        label: "Day Month Year",     example: "12 August 2026" },
+    { value: "mmddyyyy",   label: "Short MM/DD/YYYY",   example: "08/12/2026" },
+    { value: "ddmmyyyy",   label: "Short DD/MM/YYYY",   example: "12/08/2026" },
+    { value: "monthyear",  label: "Month and Year",     example: "August 2026" },
+  ],
+  amount: [
+    { value: "as-entered",       label: "As entered",         example: "" },
+    { value: "currency",         label: "Currency ($)",       example: "$1,000.00" },
+    { value: "currency-nocents", label: "Currency, no cents", example: "$1,000" },
+    { value: "number",           label: "Number only",        example: "1,000.00" },
+    { value: "words-figure",     label: "Words + figure",     example: "One Thousand Dollars ($1,000.00)" },
+  ],
+  person: [
+    { value: "as-entered", label: "As entered", example: "" },
+    { value: "title-case", label: "Title Case", example: "John Smith" },
+    { value: "uppercase",  label: "UPPERCASE",  example: "JOHN SMITH" },
+    { value: "lowercase",  label: "lowercase",  example: "john smith" },
+  ],
+  org: [
+    { value: "as-entered", label: "As entered",       example: "" },
+    { value: "title-case", label: "Title Case",       example: "Acme Corporation" },
+    { value: "uppercase",  label: "UPPERCASE",        example: "ACME CORPORATION" },
+    { value: "lowercase",  label: "lowercase",        example: "acme corporation" },
+  ],
+};
+
+function numberToWords(n: number): string {
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  function convert(num: number): string {
+    if (num === 0) return "";
+    if (num < 20) return ones[num];
+    if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 ? " " + ones[num % 10] : "");
+    if (num < 1000) return ones[Math.floor(num / 100)] + " Hundred" + (num % 100 ? " " + convert(num % 100) : "");
+    if (num < 1_000_000) return convert(Math.floor(num / 1000)) + " Thousand" + (num % 1000 ? " " + convert(num % 1000) : "");
+    if (num < 1_000_000_000) return convert(Math.floor(num / 1_000_000)) + " Million" + (num % 1_000_000 ? " " + convert(num % 1_000_000) : "");
+    return convert(Math.floor(num / 1_000_000_000)) + " Billion" + (num % 1_000_000_000 ? " " + convert(num % 1_000_000_000) : "");
+  }
+  const dollars = Math.floor(Math.abs(n));
+  const cents = Math.round((Math.abs(n) - dollars) * 100);
+  return `${convert(dollars) || "Zero"} Dollars${cents > 0 ? ` and ${cents}/100` : " and No/100"}`;
+}
+
+function applyFormat(raw: string, type: string, format: string | null): string {
+  if (!format || format === "as-entered" || !raw.trim()) return raw;
+
+  if (type === "date") {
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return raw;
+    // Adjust for timezone so date-only strings (2026-08-12) don't shift a day.
+    const utc = new Date(d.getTime() + d.getTimezoneOffset() * 60000);
+    switch (format) {
+      case "long":      return utc.toLocaleDateString("en-US", { month: "long",    day: "numeric", year: "numeric" });
+      case "dmy":       return utc.toLocaleDateString("en-GB", { day: "numeric",   month: "long",  year: "numeric" });
+      case "mmddyyyy":  return utc.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+      case "ddmmyyyy":  return utc.toLocaleDateString("en-GB", { day: "2-digit",   month: "2-digit", year: "numeric" });
+      case "monthyear": return utc.toLocaleDateString("en-US", { month: "long",    year: "numeric" });
+    }
+  }
+
+  if (type === "amount") {
+    const num = parseFloat(raw.replace(/[$,\s]/g, ""));
+    if (isNaN(num)) return raw;
+    switch (format) {
+      case "currency":         return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(num);
+      case "currency-nocents": return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+      case "number":           return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+      case "words-figure":     return `${numberToWords(num)} (${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(num)})`;
+    }
+  }
+
+  if (type === "person" || type === "org") {
+    switch (format) {
+      case "title-case": return raw.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+      case "uppercase":  return raw.toUpperCase();
+      case "lowercase":  return raw.toLowerCase();
+    }
+  }
+
+  return raw;
+}
 
 const TYPE_LABELS: Record<string, string> = {
   person: "Person", org: "Organisation", date: "Date",
@@ -391,7 +485,10 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
         return;
       }
 
-      setEntries(names.sort().map(name => ({ name, newName: name, count: grouped[name] })));
+      setEntries(names.sort().map(name => {
+        const lib = library.find(l => normalize(l.name) === normalize(name)); // eslint-disable-line react-hooks/exhaustive-deps
+        return { id: lib?.id ?? null, name, newName: name, count: grouped[name], type: lib?.type ?? "other", format: lib?.format ?? null };
+      }));
       setManageStep("list");
     } catch {
       setManageError("Could not read content controls. Make sure a Word document is open.");
@@ -505,6 +602,21 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     setEntries(prev => prev.map((e, i) => i === index ? { ...e, newName } : e));
   }
 
+  const handleFormatChange = useCallback(async (index: number, format: string | null) => {
+    const entry = entries[index];
+    if (!entry.id) return;
+    setEntries(prev => prev.map((e, i) => i === index ? { ...e, format } : e));
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      await fetch("/api/template-variables", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ id: entry.id, format }),
+      });
+    } catch { /* non-blocking */ }
+  }, [entries, tokenRef]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Fill mode ─────────────────────────────────────────────────────────────
 
   function getAutoFill(name: string): string | null {
@@ -553,6 +665,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
         return {
           name,
           type: libMatch?.type ?? "other",
+          format: libMatch?.format ?? null,
           value: autoVal ?? "",
           isAutoFilled: !!autoVal,
           isManual: libMatch ? libMatch.is_manual === 1 : false,
@@ -598,8 +711,9 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
           ccs1.load("items");
           await context.sync();
           if (ccs1.items.length === 0) return;
+          const formatted = applyFormat(match.value, match.type, match.format);
           for (const cc of ccs1.items) {
-            cc.getRange("Content").insertText(match.value, "Replace");
+            cc.getRange("Content").insertText(formatted, "Replace");
           }
           await context.sync();
 
@@ -961,6 +1075,25 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                           disabled={manageStep === "saving"}
                           className={`w-full border rounded px-2 py-0.5 text-xs font-mono text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 ${entry.newName !== entry.name ? "border-blue-400 bg-blue-50" : "border-gray-200"}`}
                         />
+                        {FORMAT_OPTIONS[entry.type] && entry.id !== null && (
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${TYPE_COLOURS[entry.type] ?? TYPE_COLOURS.other}`}>
+                              {TYPE_LABELS[entry.type] ?? entry.type}
+                            </span>
+                            <select
+                              value={entry.format ?? "as-entered"}
+                              onChange={e => handleFormatChange(i, e.target.value === "as-entered" ? null : e.target.value)}
+                              disabled={manageStep === "saving"}
+                              className="flex-1 border border-gray-200 rounded px-1.5 py-0.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                            >
+                              {FORMAT_OPTIONS[entry.type].map(opt => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.example ? `${opt.label} — ${opt.example}` : opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                         <p className="text-xs text-gray-400 mt-0.5">{entry.count} occurrence{entry.count !== 1 ? "s" : ""}{entry.newName !== entry.name ? ` · will rename from "${entry.name}"` : ""}</p>
                       </div>
                       <button
@@ -1076,6 +1209,14 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                         className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
                       />
                     )}
+                    {v.format && v.format !== "as-entered" && v.value.trim() && (() => {
+                      const preview = applyFormat(v.value, v.type, v.format);
+                      return preview !== v.value ? (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Inserts as: <span className="text-gray-700 font-medium">{preview}</span>
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
                 ))}
               </div>

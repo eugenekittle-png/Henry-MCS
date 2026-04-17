@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth";
-import { getTemplateVariables, upsertTemplateVariables } from "@/lib/db";
+import { getTemplateVariables, upsertTemplateVariables, updateTemplateVariable } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req);
@@ -25,4 +25,15 @@ export async function POST(req: NextRequest) {
 
   await upsertTemplateVariables(variables, session.email, clientNumber ?? "", matterNumber ?? "");
   return Response.json({ ok: true, count: variables.length });
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id, format } = await req.json();
+  if (!id) return Response.json({ error: "id required" }, { status: 400 });
+
+  await updateTemplateVariable(Number(id), session.email, { format: format ?? null });
+  return Response.json({ ok: true });
 }

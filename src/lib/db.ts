@@ -224,6 +224,7 @@ async function ensureInit() {
       name TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'other',
       description TEXT,
+      format TEXT,
       is_manual INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -258,6 +259,11 @@ async function ensureInit() {
       await db.execute("DROP TABLE template_variables_legacy");
     }
   } catch { /* table is new or migration already done */ }
+
+  // Migrate: add format column to template_variables
+  try {
+    await db.execute("ALTER TABLE template_variables ADD COLUMN format TEXT");
+  } catch { /* already exists */ }
 
   // Matrix extraction templates (per-user)
   await db.execute(`
@@ -840,6 +846,7 @@ export async function getAuditLogsFiltered(params: {
   if (billableOnly) {
     conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
+    conditions.push("tokens_input IS NOT NULL");
   }
   if (excludeAuthActions) {
     conditions.push(`LOWER(action) NOT IN (${AUTH_ACTIONS.map(() => "?").join(",")})`);
@@ -879,6 +886,7 @@ export async function getAuditLogsFilteredCount(params: { from?: string; to?: st
   if (billableOnly) {
     conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
     args.push(...BILLABLE_ACTIONS);
+    conditions.push("tokens_input IS NOT NULL");
   }
   if (excludeAuthActions) {
     conditions.push(`LOWER(action) NOT IN (${AUTH_ACTIONS.map(() => "?").join(",")})`);
@@ -1493,6 +1501,7 @@ export interface TemplateVariable {
   name: string;
   type: string;
   description: string | null;
+  format: string | null;
   is_manual: number;
   created_at: string;
 }
@@ -1502,7 +1511,7 @@ export async function getTemplateVariables(
 ): Promise<TemplateVariable[]> {
   await ensureInit();
   const result = await db.execute({
-    sql: "SELECT id, name, type, description, is_manual, created_at FROM template_variables WHERE user_id = ? AND client_number = ? AND matter_number = ? ORDER BY name",
+    sql: "SELECT id, name, type, description, format, is_manual, created_at FROM template_variables WHERE user_id = ? AND client_number = ? AND matter_number = ? ORDER BY name",
     args: [userId, clientNumber, matterNumber],
   });
   return result.rows as unknown as TemplateVariable[];
@@ -1528,12 +1537,13 @@ export async function upsertTemplateVariables(
   }
 }
 
-export async function updateTemplateVariable(id: number, userId: string, patch: { description?: string | null; is_manual?: boolean }): Promise<void> {
+export async function updateTemplateVariable(id: number, userId: string, patch: { description?: string | null; is_manual?: boolean; format?: string | null }): Promise<void> {
   await ensureInit();
   const sets: string[] = ["updated_at = datetime('now')"];
   const args: (string | number | null)[] = [];
   if ("description" in patch) { sets.push("description = ?"); args.push(patch.description ?? null); }
   if ("is_manual" in patch) { sets.push("is_manual = ?"); args.push(patch.is_manual ? 1 : 0); }
+  if ("format" in patch) { sets.push("format = ?"); args.push(patch.format ?? null); }
   args.push(id, userId);
   await db.execute({ sql: `UPDATE template_variables SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`, args });
 }
