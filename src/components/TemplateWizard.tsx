@@ -17,6 +17,8 @@ interface WizardVariable extends DetectedVariable {
   isManual: boolean;
   isFromLibrary: boolean;
   showLibraryPicker: boolean;
+  isSuggested: boolean;
+  suggestedMatch: LibraryVariable | null;
 }
 
 interface LibraryVariable {
@@ -137,9 +139,36 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
     return s.toLowerCase().replace(/[^a-z0-9]/g, "");
   }
 
-  function matchLibrary(suggestedName: string): LibraryVariable | null {
-    const norm = normalize(suggestedName);
-    return library.find(v => normalize(v.name) === norm) ?? null;
+  function splitWords(s: string): string[] {
+    return s
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+  }
+
+  function libSimilarity(a: string, b: string): number {
+    const na = normalize(a);
+    const nb = normalize(b);
+    if (na === nb) return 1.0;
+    if (na.includes(nb) || nb.includes(na)) return 0.85;
+    const wa = new Set(splitWords(a));
+    const wb = new Set(splitWords(b));
+    const intersection = [...wa].filter(w => wb.has(w)).length;
+    const union = new Set([...splitWords(a), ...splitWords(b)]).size;
+    return union === 0 ? 0 : intersection / union;
+  }
+
+  function findBestLibraryMatch(suggestedName: string): { exact: LibraryVariable | null; suggested: LibraryVariable | null } {
+    let exact: LibraryVariable | null = null;
+    let best: { v: LibraryVariable; score: number } | null = null;
+    for (const v of library) {
+      const score = libSimilarity(suggestedName, v.name);
+      if (score === 1.0) { exact = v; break; }
+      if (score >= 0.5 && score > (best?.score ?? 0)) best = { v, score };
+    }
+    return { exact, suggested: exact ? null : (best?.v ?? null) };
   }
 
   // ── Create mode ──────────────────────────────────────────────────────────
@@ -194,14 +223,16 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
       }
 
       setVariables(detected.map(v => {
-        const match = matchLibrary(v.suggestedName);
+        const { exact, suggested } = findBestLibraryMatch(v.suggestedName);
         return {
           ...v,
-          name: match ? match.name : v.suggestedName,
+          name: exact ? exact.name : v.suggestedName,
           enabled: true,
-          isManual: match ? match.is_manual === 1 : false,
-          isFromLibrary: !!match,
+          isManual: exact ? exact.is_manual === 1 : false,
+          isFromLibrary: !!exact,
           showLibraryPicker: false,
+          isSuggested: !exact && !!suggested,
+          suggestedMatch: !exact ? suggested : null,
         };
       }));
       setStep("review");
@@ -517,7 +548,7 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                 <div>
                   <p className="text-xs font-semibold text-gray-800">{variables.length} variables detected</p>
                   <p className="text-xs text-gray-500">
-                    {variables.filter(v => v.isFromLibrary).length} from library · {variables.filter(v => !v.isFromLibrary).length} new · {enabledCount} selected
+                    {variables.filter(v => v.isFromLibrary).length} matched · {variables.filter(v => v.isSuggested).length} suggested · {variables.filter(v => !v.isFromLibrary && !v.isSuggested).length} new
                   </p>
                 </div>
                 <button onClick={handleCreateReset} className="text-xs text-gray-400 hover:text-gray-600">Rescan</button>
@@ -531,19 +562,49 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                         <div className="flex items-center gap-1.5 mb-1">
                           <input
                             type="text" value={v.name}
-                            onChange={e => updateVariable(i, { name: e.target.value, isFromLibrary: false })}
+                            onChange={e => updateVariable(i, { name: e.target.value, isFromLibrary: false, isSuggested: false, suggestedMatch: null })}
                             disabled={!v.enabled}
                             className="flex-1 border border-gray-200 rounded px-2 py-0.5 text-xs font-mono text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-50"
                           />
                           {v.isFromLibrary
                             ? <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0 font-medium">Library</span>
-                            : <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 flex-shrink-0">New</span>
+                            : v.isSuggested
+                              ? <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0 font-medium">Suggested</span>
+                              : <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 flex-shrink-0">New</span>
                           }
                           <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 ${TYPE_COLOURS[v.type]}`}>{TYPE_LABELS[v.type]}</span>
                         </div>
 
-                        {/* Library picker */}
-                        {library.length > 0 && !v.isFromLibrary && v.enabled && (
+                        {/* Suggested match: accept or dismiss */}
+                        {v.isSuggested && v.suggestedMatch && v.enabled && (
+                          <div className="flex items-center gap-2 mb-1 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                            <span className="text-xs text-amber-800 flex-1">
+                              Match: <span className="font-mono font-semibold">{v.suggestedMatch.name}</span>?
+                            </span>
+                            <button
+                              onClick={() => updateVariable(i, {
+                                name: v.suggestedMatch!.name,
+                                isFromLibrary: true,
+                                isManual: v.suggestedMatch!.is_manual === 1,
+                                isSuggested: false,
+                                suggestedMatch: null,
+                                showLibraryPicker: false,
+                              })}
+                              className="text-xs text-green-700 hover:text-green-900 font-semibold"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              onClick={() => updateVariable(i, { isSuggested: false, suggestedMatch: null })}
+                              className="text-xs text-gray-400 hover:text-gray-600"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Library picker — shown for New variables (no suggestion, or after dismissing one) */}
+                        {library.length > 0 && !v.isFromLibrary && !v.isSuggested && v.enabled && (
                           <div className="mb-1">
                             {v.showLibraryPicker ? (
                               <div className="flex items-center gap-1">
