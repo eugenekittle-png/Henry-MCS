@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "Failed to parse variable detection response" }, { status: 500 });
     }
 
-    logAction({
+    await logAction({
       username: session.email,
       action: "CreateTemplate (Word)",
       clientNumber: clientNumber || null,
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ variables });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal server error";
-    logAction({ username: session.email, action: "TemplateDetect", details: { error: message }, success: false, ipAddress: ip });
+    await logAction({ username: session.email, action: "TemplateDetect", details: { error: message }, success: false, ipAddress: ip });
     return Response.json({ error: message }, { status: 500 });
   }
 }

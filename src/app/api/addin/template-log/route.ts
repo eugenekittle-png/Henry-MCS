@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const { action, variables, clientNumber, matterNumber } = await req.json();
     const ip = getClientIp(req);
 
-    logAction({
+    await logAction({
       username: session.email,
       action,
       clientNumber: clientNumber || null,
