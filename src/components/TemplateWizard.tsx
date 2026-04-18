@@ -151,6 +151,23 @@ function applyFormat(raw: string, type: string, format: string | null): string {
   return raw;
 }
 
+function getValidationError(value: string, type: string, format: string | null): string | null {
+  if (!value.trim()) return null;           // empty fields are fine — just unfilled
+  if (!format || format === "as-entered") return null; // no format = no constraint
+
+  if (type === "date") {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "Not a recognisable date";
+  }
+
+  if (type === "amount") {
+    const num = parseFloat(value.replace(/[$,\s]/g, ""));
+    if (isNaN(num)) return "Enter a number";
+  }
+
+  return null;
+}
+
 const TYPE_LABELS: Record<string, string> = {
   person: "Person", org: "Organisation", date: "Date",
   amount: "Amount", address: "Address", reference: "Reference", other: "Other",
@@ -1190,45 +1207,69 @@ export default function TemplateWizard({ officeReady, tokenRef, selectedClient, 
                         <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">Manual</span>
                       )}
                     </div>
-                    {v.type === "address" ? (
-                      <textarea
-                        rows={2}
-                        value={v.value}
-                        onChange={e => updateFillVar(i, e.target.value)}
-                        disabled={fillStep === "filling"}
-                        placeholder={`Enter ${v.name}...`}
-                        className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 resize-none"
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={v.value}
-                        onChange={e => updateFillVar(i, e.target.value)}
-                        disabled={fillStep === "filling"}
-                        placeholder={`Enter ${v.name}...`}
-                        className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-                      />
-                    )}
-                    {v.format && v.format !== "as-entered" && v.value.trim() && (() => {
-                      const preview = applyFormat(v.value, v.type, v.format);
-                      return preview !== v.value ? (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          Inserts as: <span className="text-gray-700 font-medium">{preview}</span>
-                        </p>
-                      ) : null;
+                    {(() => {
+                      const err = getValidationError(v.value, v.type, v.format);
+                      const borderCls = err
+                        ? "border-red-400 focus:ring-red-400"
+                        : "border-gray-200 focus:ring-blue-500";
+                      return (
+                        <>
+                          {v.type === "address" ? (
+                            <textarea
+                              rows={2}
+                              value={v.value}
+                              onChange={e => updateFillVar(i, e.target.value)}
+                              disabled={fillStep === "filling"}
+                              placeholder={`Enter ${v.name}...`}
+                              className={`w-full border rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 disabled:opacity-50 resize-none ${borderCls}`}
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={v.value}
+                              onChange={e => updateFillVar(i, e.target.value)}
+                              disabled={fillStep === "filling"}
+                              placeholder={`Enter ${v.name}...`}
+                              className={`w-full border rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-1 disabled:opacity-50 ${borderCls}`}
+                            />
+                          )}
+                          {err && (
+                            <p className="text-xs text-red-500 mt-0.5">{err}</p>
+                          )}
+                          {!err && v.format && v.format !== "as-entered" && v.value.trim() && (() => {
+                            const preview = applyFormat(v.value, v.type, v.format);
+                            return preview !== v.value ? (
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                Inserts as: <span className="text-gray-700 font-medium">{preview}</span>
+                              </p>
+                            ) : null;
+                          })()}
+                        </>
+                      );
                     })()}
                   </div>
                 ))}
               </div>
 
               <div className="px-3 py-2 border-t border-gray-100 flex-shrink-0">
-                <button
-                  onClick={handleFillDocument}
-                  disabled={fillStep === "filling" || fillVars.every(v => !v.value.trim())}
-                  className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {fillStep === "filling" ? "Filling..." : `Fill ${fillVars.filter(v => v.value.trim()).length} Field${fillVars.filter(v => v.value.trim()).length !== 1 ? "s" : ""}`}
-                </button>
+                {(() => {
+                  const errorCount = fillVars.filter(v => getValidationError(v.value, v.type, v.format)).length;
+                  const filledCount = fillVars.filter(v => v.value.trim()).length;
+                  const blocked = fillStep === "filling" || filledCount === 0 || errorCount > 0;
+                  return (
+                    <button
+                      onClick={handleFillDocument}
+                      disabled={blocked}
+                      className="w-full bg-blue-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {fillStep === "filling"
+                        ? "Filling..."
+                        : errorCount > 0
+                          ? `Fix ${errorCount} error${errorCount !== 1 ? "s" : ""} to continue`
+                          : `Fill ${filledCount} Field${filledCount !== 1 ? "s" : ""}`}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           )}
