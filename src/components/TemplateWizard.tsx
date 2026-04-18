@@ -151,10 +151,11 @@ function applyFormat(raw: string, type: string, format: string | null): string {
   return raw;
 }
 
-function getValidationError(value: string, type: string, format: string | null): string | null {
-  if (!value.trim()) return null;           // empty fields are fine — just unfilled
-  if (!format || format === "as-entered") return null; // no format = no constraint
+function getValidationError(value: string, type: string, _format: string | null): string | null {
+  if (!value.trim()) return null; // empty fields are fine — just unfilled
 
+  // Validate by type regardless of whether a format is set.
+  // A date field must be parseable; an amount field must be numeric.
   if (type === "date") {
     const d = new Date(value);
     if (isNaN(d.getTime())) return "Not a recognisable date";
