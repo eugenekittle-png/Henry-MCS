@@ -6,7 +6,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>e9f3c2b1-7a4d-4e8f-b2c5-1a9d3f7e2b6c</Id>
-  <Version>1.0.0.9</Version>
+  <Version>1.0.0.3</Version>
   <ProviderName>Henry MCS</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
@@ -37,11 +37,8 @@
           <FunctionFile resid="Commands.Url" />
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
-
-            <CustomTab id="TabHenryMCS">
-
-              <!-- Henry MCS group: AI assistant -->
-              <Group id="HenryMCSAssistGroup">
+            <OfficeTab id="TabHome">
+              <Group id="HenryMCSGroup">
                 <Label resid="GroupLabel" />
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16" />
@@ -65,36 +62,7 @@
                   </Action>
                 </Control>
               </Group>
-
-              <!-- Automation group: template and document automation tools -->
-              <Group id="HenryMCSAutomationGroup">
-                <Label resid="AutomationGroupLabel" />
-                <Icon>
-                  <bt:Image size="16" resid="TemplateCreate.16x16" />
-                  <bt:Image size="32" resid="TemplateCreate.32x32" />
-                  <bt:Image size="80" resid="TemplateCreate.80x80" />
-                </Icon>
-                <Control xsi:type="Button" id="HenryMCSMakeTemplate">
-                  <Label resid="MakeTemplateLabel" />
-                  <Supertip>
-                    <Title resid="MakeTemplateLabel" />
-                    <Description resid="MakeTemplateDesc" />
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="TemplateCreate.16x16" />
-                    <bt:Image size="32" resid="TemplateCreate.32x32" />
-                    <bt:Image size="80" resid="TemplateCreate.80x80" />
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>HenryMCSPane</TaskpaneId>
-                    <SourceLocation resid="TemplatePane.Url" />
-                  </Action>
-                </Control>
-              </Group>
-
-              <Label resid="TabLabel" />
-            </CustomTab>
-
+            </OfficeTab>
           </ExtensionPoint>
 
           <ExtensionPoint xsi:type="ContextMenu">
@@ -129,28 +97,20 @@
         <bt:Image id="Icon.16x16" DefaultValue="https://henry-mcs.vercel.app/images/henry-mcs.png" />
         <bt:Image id="Icon.32x32" DefaultValue="https://henry-mcs.vercel.app/images/henry-mcs.png" />
         <bt:Image id="Icon.80x80" DefaultValue="https://henry-mcs.vercel.app/images/henry-mcs.png" />
-        <bt:Image id="TemplateCreate.16x16" DefaultValue="https://henry-mcs.vercel.app/images/Template-Create.png" />
-        <bt:Image id="TemplateCreate.32x32" DefaultValue="https://henry-mcs.vercel.app/images/Template-Create.png" />
-        <bt:Image id="TemplateCreate.80x80" DefaultValue="https://henry-mcs.vercel.app/images/Template-Create.png" />
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Commands.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin-commands.html" />
         <bt:Url id="TaskPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin" />
         <bt:Url id="AskPane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?action=ask" />
-        <bt:Url id="TemplatePane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?action=template-wizard" />
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="TabLabel" DefaultValue="Henry MCS" />
         <bt:String id="GroupLabel" DefaultValue="Henry MCS" />
-        <bt:String id="AutomationGroupLabel" DefaultValue="Automation" />
         <bt:String id="OpenPaneLabel" DefaultValue="Henry MCS" />
         <bt:String id="AskLabel" DefaultValue="Henry MCS: Ask" />
-        <bt:String id="MakeTemplateLabel" DefaultValue="Make Template" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="OpenPaneDesc" DefaultValue="Open the Henry MCS AI assistant" />
         <bt:String id="AskDesc" DefaultValue="Ask Henry MCS about the selected text" />
-        <bt:String id="MakeTemplateDesc" DefaultValue="Convert this document into a reusable template by detecting and replacing variable data" />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
