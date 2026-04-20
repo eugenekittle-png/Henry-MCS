@@ -299,6 +299,19 @@ async function ensureInit() {
     )
   `);
 
+  // Word template files attached to Matrix templates
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS word_template_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      matrix_template_id INTEGER NOT NULL REFERENCES matrix_templates(id),
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      variable_names TEXT NOT NULL DEFAULT '[]',
+      file_size INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
   // Seed users if empty
   const userCount = await db.execute("SELECT COUNT(*) as count FROM users");
   if ((userCount.rows[0].count as number) === 0) {
@@ -1260,6 +1273,7 @@ export async function updateMatrixTemplate(id: number, userId: number, name: str
 export async function deleteMatrixTemplate(id: number, userId: number): Promise<void> {
   await ensureInit();
   await db.execute({ sql: "DELETE FROM matrix_template_columns WHERE template_id = ?", args: [id] });
+  await db.execute({ sql: "DELETE FROM word_template_files WHERE matrix_template_id = ?", args: [id] });
   await db.execute({ sql: "DELETE FROM matrix_templates WHERE id = ? AND user_id = ?", args: [id, userId] });
 }
 
@@ -1551,4 +1565,54 @@ export async function updateTemplateVariable(id: number, userId: string, patch: 
 export async function deleteTemplateVariable(id: number, userId: string): Promise<void> {
   await ensureInit();
   await db.execute({ sql: "DELETE FROM template_variables WHERE id = ? AND user_id = ?", args: [id, userId] });
+}
+
+// ── Word template files (Matrix) ───────────────────────────────────────────────
+
+export interface WordTemplateFile {
+  id: number;
+  matrix_template_id: number;
+  name: string;
+  content: string; // base64-encoded .docx
+  variable_names: string; // JSON array of tag names
+  file_size: number;
+  created_at: string;
+}
+
+export async function getWordTemplateFiles(matrixTemplateId: number): Promise<Omit<WordTemplateFile, "content">[]> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, matrix_template_id, name, variable_names, file_size, created_at FROM word_template_files WHERE matrix_template_id = ? ORDER BY created_at ASC",
+    args: [matrixTemplateId],
+  });
+  return result.rows as unknown as Omit<WordTemplateFile, "content">[];
+}
+
+export async function getWordTemplateFile(id: number, matrixTemplateId: number): Promise<WordTemplateFile | undefined> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "SELECT id, matrix_template_id, name, content, variable_names, file_size, created_at FROM word_template_files WHERE id = ? AND matrix_template_id = ?",
+    args: [id, matrixTemplateId],
+  });
+  return (result.rows[0] as unknown as WordTemplateFile) || undefined;
+}
+
+export async function addWordTemplateFile(
+  matrixTemplateId: number,
+  name: string,
+  content: string,
+  variableNames: string[],
+  fileSize: number
+): Promise<number> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: "INSERT INTO word_template_files (matrix_template_id, name, content, variable_names, file_size) VALUES (?, ?, ?, ?, ?)",
+    args: [matrixTemplateId, name, content, JSON.stringify(variableNames), fileSize],
+  });
+  return Number(result.lastInsertRowid);
+}
+
+export async function deleteWordTemplateFile(id: number, matrixTemplateId: number): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM word_template_files WHERE id = ? AND matrix_template_id = ?", args: [id, matrixTemplateId] });
 }

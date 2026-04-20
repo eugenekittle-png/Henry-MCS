@@ -41,12 +41,21 @@ interface SuggestedColumn {
   selected: boolean;
 }
 
+interface WordTemplateFile {
+  id: number;
+  name: string;
+  variable_names: string; // JSON
+  file_size: number;
+  created_at: string;
+}
+
 export default function MatrixTemplatePage() {
   const { user } = useAuth();
   const router = useRouter();
   const params = useParams();
   const templateId = Number(params.id);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wordFileInputRef = useRef<HTMLInputElement>(null);
 
   const [template, setTemplate] = useState<MatrixTemplate | null>(null);
   const [columns, setColumns] = useState<MatrixTemplateColumn[]>([]);
@@ -76,6 +85,12 @@ export default function MatrixTemplatePage() {
     savedTimer.current = setTimeout(() => setSavedMsg(""), 3000);
   }
 
+  // Word template files
+  const [wordFiles, setWordFiles] = useState<WordTemplateFile[]>([]);
+  const [wordUploading, setWordUploading] = useState(false);
+  const [wordUploadError, setWordUploadError] = useState("");
+  const [wordDeleteConfirm, setWordDeleteConfirm] = useState<number | null>(null);
+
   // Generate from document
   const [generateFile, setGenerateFile] = useState<File | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -85,15 +100,20 @@ export default function MatrixTemplatePage() {
 
   const load = useCallback(async () => {
     try {
-      const [tRes, cRes] = await Promise.all([
+      const [tRes, cRes, wRes] = await Promise.all([
         fetch(`/api/matrix/templates/${templateId}`),
         fetch(`/api/matrix/templates/${templateId}/columns`),
+        fetch(`/api/matrix/templates/${templateId}/word-files`),
       ]);
       if (!tRes.ok) { setError("Template not found."); return; }
       const { template } = await tRes.json();
       const { columns } = await cRes.json();
       setTemplate(template);
       setColumns(columns);
+      if (wRes.ok) {
+        const { files } = await wRes.json();
+        setWordFiles(files);
+      }
     } catch {
       setError("Could not load template.");
     } finally {
@@ -175,6 +195,43 @@ export default function MatrixTemplatePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orderedIds: newCols.map((c) => c.id) }),
     });
+  }
+
+  async function handleWordFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (wordFileInputRef.current) wordFileInputRef.current.value = "";
+    setWordUploadError("");
+    setWordUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/matrix/templates/${templateId}/word-files`, { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) { setWordUploadError(data.error || "Upload failed."); return; }
+      const newFile: WordTemplateFile = {
+        id: data.id,
+        name: data.name,
+        variable_names: data.variable_names,
+        file_size: data.file_size,
+        created_at: new Date().toISOString(),
+      };
+      setWordFiles((prev) => [...prev, newFile]);
+      showSaved("Word template uploaded");
+    } catch {
+      setWordUploadError("Upload failed.");
+    } finally {
+      setWordUploading(false);
+    }
+  }
+
+  async function handleWordFileDelete(fileId: number) {
+    const res = await fetch(`/api/matrix/templates/${templateId}/word-files/${fileId}`, { method: "DELETE" });
+    if (res.ok) {
+      setWordFiles((prev) => prev.filter((f) => f.id !== fileId));
+      showSaved("Word template removed");
+    }
+    setWordDeleteConfirm(null);
   }
 
   async function handleGenerate() {
@@ -547,6 +604,81 @@ export default function MatrixTemplatePage() {
           </DndContext>
         </div>
       )}
+
+      {/* ── Word Templates ─────────────────────────────────────── */}
+      <div className="mt-10">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-semibold text-gray-800">Word Templates</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Upload .docx files whose content controls will be filled from extraction results.
+            </p>
+          </div>
+          <label className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors cursor-pointer ${wordUploading ? "bg-gray-100 text-gray-400" : "bg-gray-800 text-white hover:bg-gray-700"}`}>
+            {wordUploading ? "Uploading…" : "+ Upload .docx"}
+            <input
+              ref={wordFileInputRef}
+              type="file"
+              accept=".docx"
+              className="sr-only"
+              disabled={wordUploading}
+              onChange={handleWordFileUpload}
+            />
+          </label>
+        </div>
+
+        {wordUploadError && (
+          <p className="text-sm text-red-600 mb-2">{wordUploadError}</p>
+        )}
+
+        {wordFiles.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 bg-white border border-dashed border-gray-300 rounded-xl">
+            <p className="text-sm font-medium">No Word templates yet</p>
+            <p className="text-xs mt-1">Upload a .docx file with content controls to fill from extraction results</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {wordFiles.map((f) => {
+              let varNames: string[] = [];
+              try { varNames = JSON.parse(f.variable_names); } catch { /* ignore */ }
+              return (
+                <div key={f.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <svg className="w-5 h-5 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{f.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {varNames.length > 0
+                          ? `${varNames.length} variable${varNames.length !== 1 ? "s" : ""}: ${varNames.slice(0, 4).join(", ")}${varNames.length > 4 ? "…" : ""}`
+                          : "No content controls detected"}
+                        {" · "}{(f.file_size / 1024).toFixed(0)} KB
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setWordDeleteConfirm(f.id)}
+                      className="p-1.5 text-gray-300 hover:text-red-500 rounded transition-colors shrink-0"
+                      title="Remove"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                  {wordDeleteConfirm === f.id && (
+                    <div className="px-4 py-3 bg-red-50 border-t border-red-100 flex items-center gap-3">
+                      <p className="text-sm text-gray-700 flex-1">Remove <strong>{f.name}</strong>?</p>
+                      <button onClick={() => handleWordFileDelete(f.id)} className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700">Remove</button>
+                      <button onClick={() => setWordDeleteConfirm(null)} className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
