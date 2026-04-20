@@ -26,12 +26,6 @@ interface ExtractionRow {
   values: Record<string, string | null>;
 }
 
-interface WordTemplateFile {
-  id: number;
-  name: string;
-  variable_names: string; // JSON
-  file_size: number;
-}
 
 interface ProgressState {
   current: number;
@@ -59,29 +53,17 @@ export default function MatrixExtractPage() {
   const [done, setDone] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  // Word template fill
-  const [wordFiles, setWordFiles] = useState<WordTemplateFile[]>([]);
-  const [selectedWordFileIds, setSelectedWordFileIds] = useState<Set<number>>(new Set());
-  const [filling, setFilling] = useState(false);
-  const [fillRow, setFillRow] = useState<ExtractionRow | null>(null); // which row to fill from
-
   const load = useCallback(async () => {
     try {
-      const [tRes, cRes, wRes] = await Promise.all([
+      const [tRes, cRes] = await Promise.all([
         fetch(`/api/matrix/templates/${templateId}`),
         fetch(`/api/matrix/templates/${templateId}/columns`),
-        fetch(`/api/matrix/templates/${templateId}/word-files`),
       ]);
       if (!tRes.ok) { setLoadError("Template not found."); return; }
       const { template } = await tRes.json();
       const { columns } = await cRes.json();
       setTemplate(template);
       setColumns(columns);
-      if (wRes.ok) {
-        const { files } = await wRes.json();
-        setWordFiles(files);
-        setSelectedWordFileIds(new Set(files.map((f: WordTemplateFile) => f.id)));
-      }
     } catch {
       setLoadError("Could not load template.");
     }
@@ -235,44 +217,6 @@ export default function MatrixExtractPage() {
       // silent — could add an error state here if needed
     } finally {
       setExporting(false);
-    }
-  }
-
-  async function handleFillDocuments() {
-    if (!fillRow || selectedWordFileIds.size === 0) return;
-    setFilling(true);
-    try {
-      // Build values map: column name → value (using non-null values from the selected row)
-      const values: Record<string, string> = {};
-      for (const [col, val] of Object.entries(fillRow.values)) {
-        if (val != null && val !== "") values[col] = val;
-      }
-
-      const res = await fetch(`/api/matrix/templates/${templateId}/fill`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values, fileIds: [...selectedWordFileIds] }),
-      });
-
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        alert(d.error || "Fill failed.");
-        return;
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const cd = res.headers.get("Content-Disposition") ?? "";
-      const nameMatch = cd.match(/filename="([^"]+)"/);
-      a.download = nameMatch ? decodeURIComponent(nameMatch[1]) : "filled-documents.docx";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      alert("Download failed. Please try again.");
-    } finally {
-      setFilling(false);
     }
   }
 
@@ -506,94 +450,6 @@ export default function MatrixExtractPage() {
         </div>
       )}
 
-      {/* ── Fill Word Templates ─────────────────────────────────── */}
-      {done && wordFiles.length > 0 && (
-        <div className="mt-8 bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-800 mb-0.5">Fill Word Templates</h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Select which row to use as the source data, then download filled documents.
-          </p>
-
-          {/* Row picker */}
-          <div className="mb-4">
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Fill from</label>
-            <div className="flex flex-wrap gap-2">
-              {rows.map((row, i) => {
-                const label = row.isConsensus ? "Consensus" : row.filename;
-                const isSelected = fillRow === row;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setFillRow(isSelected ? null : row)}
-                    className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                      isSelected
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-                    }`}
-                  >
-                    {row.isConsensus ? (
-                      <span className="font-semibold">{label}</span>
-                    ) : (
-                      <span className="truncate max-w-[160px] inline-block align-bottom">{label}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Word file checkboxes */}
-          <div className="mb-4">
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Templates to fill</label>
-            <div className="space-y-1.5">
-              {wordFiles.map((f) => {
-                const checked = selectedWordFileIds.has(f.id);
-                return (
-                  <label key={f.id} className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        setSelectedWordFileIds((prev) => {
-                          const next = new Set(prev);
-                          if (e.target.checked) next.add(f.id);
-                          else next.delete(f.id);
-                          return next;
-                        });
-                      }}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">
-                      {f.name}
-                      <span className="ml-2 text-xs text-gray-400">
-                        {(() => { try { return `${JSON.parse(f.variable_names).length} vars`; } catch { return ""; } })()}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          <button
-            onClick={handleFillDocuments}
-            disabled={!fillRow || selectedWordFileIds.size === 0 || filling}
-            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            {filling
-              ? "Filling…"
-              : selectedWordFileIds.size === 1
-                ? "Download Filled Document"
-                : `Download ${selectedWordFileIds.size} Filled Documents`}
-          </button>
-          {!fillRow && (
-            <p className="text-xs text-gray-400 mt-2">Select a row above to enable download.</p>
-          )}
-        </div>
-      )}
     </div>
   );
 }
