@@ -65,7 +65,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   if (Array.isArray(groupIds)) {
     await setUserGroups(userId, groupIds);
-    changes.groupsUpdated = true;
+    const newGroups = await getUserGroups(userId);
+    changes.groupsUpdated = newGroups.map(g => g.name);
   }
 
   await logAction({ username: session.email, action: "User-Update", details: changes, success: true, ipAddress: ip });

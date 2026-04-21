@@ -9,8 +9,6 @@ const ALL_TOOLS = [
   { key: "assist",    label: "Assist",     href: "/assist" },
   { key: "breakdown", label: "Breakdown",  href: "/breakdown" },
   { key: "compare",   label: "Compare",    href: "/compare" },
-  { key: "summary",   label: "Summary",    href: "/summary" },
-  { key: "review",    label: "Review",     href: "/review" },
   { key: "matrix",    label: "Matrix",     href: "/matrix" },
 ];
 
