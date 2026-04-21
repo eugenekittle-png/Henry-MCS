@@ -47,10 +47,10 @@ export default function LoginPage() {
         return;
       }
       if (data.mustChangePassword) {
-        login(data.username, data.email, data.role);
+        login(data.username, data.email, data.role, data.pages ?? []);
         router.push("/change-password");
       } else {
-        login(data.username, data.email, data.role);
+        login(data.username, data.email, data.role, data.pages ?? []);
         router.push("/");
       }
     } catch {

@@ -35,7 +35,7 @@ export default function VerifyPage() {
         setRemainingBackup(data.remainingBackupCodes);
       }
 
-      login(data.username, data.email ?? "", data.role);
+      login(data.username, data.email ?? "", data.role, data.pages ?? []);
       if (data.mustChangePassword) {
         router.push("/change-password");
       } else {

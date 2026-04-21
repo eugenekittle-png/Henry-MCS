@@ -18,6 +18,12 @@ interface User {
   last_login_at: string | null;
 }
 
+interface GroupOption {
+  id: number;
+  name: string;
+  is_default: number;
+}
+
 type SortKey = "name" | "email" | "role" | "totp_enabled" | "created_at" | "last_login_at";
 
 export default function UsersPage() {
@@ -30,17 +36,23 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [require2fa, setRequire2fa] = useState(false);
   const [require2faSaving, setRequire2faSaving] = useState(false);
+  const [allGroups, setAllGroups] = useState<GroupOption[]>([]);
+  const [editGroupIds, setEditGroupIds] = useState<number[]>([]);
 
   const fetchUsers = useCallback(async () => {
-    const [usersRes, settingsRes] = await Promise.all([
+    const [usersRes, settingsRes, groupsRes] = await Promise.all([
       fetch("/api/users"),
       fetch("/api/admin/settings"),
+      fetch("/api/groups"),
     ]);
     const data = await usersRes.json();
     setUsers(data);
     if (settingsRes.ok) {
       const settings = await settingsRes.json();
       setRequire2fa(settings.require2fa);
+    }
+    if (groupsRes.ok) {
+      setAllGroups(await groupsRes.json());
     }
     setLoading(false);
   }, []);
@@ -97,10 +109,18 @@ export default function UsersPage() {
     fetchUsers();
   };
 
-  const handleEdit = (user: User) => {
+  const handleEdit = async (user: User) => {
     setEditingId(user.id);
     setEditForm({ first_name: user.first_name ?? "", last_name: user.last_name ?? "", email: user.email, role: user.role, password: "" });
     setError(null);
+    // Load the user's current groups
+    const res = await fetch(`/api/users/${user.id}/groups`);
+    if (res.ok) {
+      const data = await res.json();
+      setEditGroupIds((data.groups as GroupOption[]).map(g => g.id));
+    } else {
+      setEditGroupIds([]);
+    }
   };
 
   const handleUpdate = async () => {
@@ -114,7 +134,7 @@ export default function UsersPage() {
       setError("Password must be at least 8 characters.");
       return;
     }
-    const body: Record<string, string> = { role: editForm.role, email: editForm.email, first_name: editForm.first_name, last_name: editForm.last_name };
+    const body: Record<string, unknown> = { role: editForm.role, email: editForm.email, first_name: editForm.first_name, last_name: editForm.last_name, groupIds: editGroupIds };
     if (editForm.password) body.password = editForm.password;
     const res = await fetch(`/api/users/${editingId}`, {
       method: "PUT",
@@ -192,6 +212,7 @@ export default function UsersPage() {
     setShowAdd(false);
     setForm({ first_name: "", last_name: "", email: "", password: "", role: "user" });
     setEditForm({ first_name: "", last_name: "", email: "", role: "user", password: "" });
+    setEditGroupIds([]);
     setError(null);
   };
 
@@ -426,6 +447,28 @@ export default function UsersPage() {
                             className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900"
                           />
                         </div>
+                        {editForm.role === "user" && allGroups.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-600 mb-1.5">Groups</p>
+                            <div className="flex flex-wrap gap-3">
+                              {allGroups.map(g => (
+                                <label key={g.id} className="flex items-center gap-1.5 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={editGroupIds.includes(g.id)}
+                                    onChange={() => {
+                                      setEditGroupIds(ids =>
+                                        ids.includes(g.id) ? ids.filter(i => i !== g.id) : [...ids, g.id]
+                                      );
+                                    }}
+                                    className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <span className="text-xs text-gray-700">{g.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <div className="flex gap-2 pt-1">
                           <button onClick={handleUpdate} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Save</button>
                           <button onClick={handleCancel} className="text-gray-500 hover:text-gray-700 text-sm font-medium">Cancel</button>

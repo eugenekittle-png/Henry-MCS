@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, hashPassword } from "@/lib/auth";
-import { getAllUsers, dbCreateUser } from "@/lib/db";
+import { getAllUsers, dbCreateUser, getGroups, setUserGroups } from "@/lib/db";
 import { validatePassword } from "@/lib/password";
 import { logAction, getClientIp } from "@/lib/audit";
 
@@ -39,6 +39,12 @@ export async function POST(request: NextRequest) {
   const passwordHash = await hashPassword(password);
   try {
     const user = await dbCreateUser(email, passwordHash, role, first_name?.trim() || undefined, last_name?.trim() || undefined);
+    // Auto-assign new users to the default group
+    if (user && role === "user") {
+      const groups = await getGroups();
+      const defaultGroup = groups.find(g => g.is_default);
+      if (defaultGroup) await setUserGroups(user.id, [defaultGroup.id]);
+    }
     await logAction({ username: session.email, action: "User-Create", details: { targetEmail: email.toLowerCase(), role }, success: true, ipAddress: ip });
     return NextResponse.json(user, { status: 201 });
   } catch (err) {

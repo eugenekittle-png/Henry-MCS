@@ -6,10 +6,12 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/AuthContext";
 
 const ALL_TOOLS = [
-  { key: "assist", label: "Assist", href: "/assist" },
-  { key: "breakdown", label: "Breakdown", href: "/breakdown" },
-  { key: "compare", label: "Compare", href: "/compare" },
-  { key: "matrix", label: "Matrix", href: "/matrix" },
+  { key: "assist",    label: "Assist",     href: "/assist" },
+  { key: "breakdown", label: "Breakdown",  href: "/breakdown" },
+  { key: "compare",   label: "Compare",    href: "/compare" },
+  { key: "summary",   label: "Summary",    href: "/summary" },
+  { key: "review",    label: "Review",     href: "/review" },
+  { key: "matrix",    label: "Matrix",     href: "/matrix" },
 ];
 
 const MAX_PINS = 6;
@@ -19,11 +21,19 @@ export default function Navbar() {
   const { user, logout } = useAuth();
   const [adminOpen, setAdminOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [reportingOpen, setReportingOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [pins, setPins] = useState<string[]>(["assist"]);
   const adminRef = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
+  const reportingRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+
+  // Determine which tools this user can access
+  const isAdmin = user?.role === "admin";
+  const visibleTools = ALL_TOOLS.filter(t => isAdmin || (user?.pages ?? []).includes(t.key));
+  const canAudit = isAdmin || (user?.pages ?? []).includes("audit");
+  const canUsage = isAdmin || (user?.pages ?? []).includes("usage");
 
   useEffect(() => {
     async function loadPins() {
@@ -47,6 +57,9 @@ export default function Navbar() {
       }
       if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
         setToolsOpen(false);
+      }
+      if (reportingRef.current && !reportingRef.current.contains(e.target as Node)) {
+        setReportingOpen(false);
       }
       if (userRef.current && !userRef.current.contains(e.target as Node)) {
         setUserOpen(false);
@@ -85,7 +98,8 @@ export default function Navbar() {
         : "text-gray-300 hover:text-white hover:bg-white/10"
     }`;
 
-  const isAdminPage = ["/clients", "/matters", "/users", "/audit", "/usage", "/playbooks"].includes(pathname);
+  const isAdminPage = ["/clients", "/matters", "/users", "/audit", "/usage", "/playbooks", "/groups"].includes(pathname);
+  const isReportingPage = ["/audit", "/usage"].some(p => pathname.startsWith(p));
 
   const dropdownLinkClass = (path: string) =>
     `block px-4 py-2 text-sm transition-colors ${
@@ -95,9 +109,9 @@ export default function Navbar() {
     }`;
 
   // Highlight "Tools" button if on a tool page that isn't already shown as a pinned link
-  const pinnedPaths = ALL_TOOLS.filter((t) => pins.includes(t.key)).map((t) => t.href);
+  const pinnedPaths = visibleTools.filter((t) => pins.includes(t.key)).map((t) => t.href);
   const isOnUnpinnedTool =
-    ALL_TOOLS.some((t) => pathname.startsWith(t.href)) &&
+    visibleTools.some((t) => pathname.startsWith(t.href)) &&
     !pinnedPaths.some((p) => pathname.startsWith(p));
 
   return (
@@ -115,7 +129,7 @@ export default function Navbar() {
 
         <div className="flex items-center gap-2">
           {/* Pinned tool links */}
-          {ALL_TOOLS.filter((t) => pins.includes(t.key)).map((tool) => (
+          {visibleTools.filter((t) => pins.includes(t.key)).map((tool) => (
             <Link key={tool.key} href={tool.href} className={linkClass(tool.href)}>
               {tool.label}
             </Link>
@@ -148,7 +162,7 @@ export default function Navbar() {
                   {pins.length} / {MAX_PINS} pinned to navbar
                 </p>
                 <div className="border-t border-gray-100 mb-1" />
-                {ALL_TOOLS.map((tool) => {
+                {visibleTools.map((tool) => {
                   const isPinned = pins.includes(tool.key);
                   const canPin = !isPinned && pins.length < MAX_PINS;
                   const isActive = pathname.startsWith(tool.href);
@@ -201,8 +215,49 @@ export default function Navbar() {
             )}
           </div>
 
+          {/* Reporting dropdown — for non-admins who have audit/usage access */}
+          {!isAdmin && (canAudit || canUsage) && (
+            <>
+              <span className="w-px bg-gray-700 mx-1" />
+              <div className="relative" ref={reportingRef}>
+                <button
+                  onClick={() => setReportingOpen(!reportingOpen)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+                    isReportingPage
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-300 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  Reporting
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform ${reportingOpen ? "rotate-180" : ""}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {reportingOpen && (
+                  <div className="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    {canAudit && (
+                      <Link href="/audit" className={dropdownLinkClass("/audit")} onClick={() => setReportingOpen(false)}>
+                        Audit Log
+                      </Link>
+                    )}
+                    {canUsage && (
+                      <Link href="/usage" className={dropdownLinkClass("/usage")} onClick={() => setReportingOpen(false)}>
+                        Usage & Cost
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
           {/* Admin dropdown */}
-          {user.role === "admin" && (
+          {isAdmin && (
             <>
               <span className="w-px bg-gray-700 mx-1" />
               <div className="relative" ref={adminRef}>
@@ -228,6 +283,9 @@ export default function Navbar() {
                   <div className="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                     <Link href="/users" className={dropdownLinkClass("/users")} onClick={() => setAdminOpen(false)}>
                       Users
+                    </Link>
+                    <Link href="/groups" className={dropdownLinkClass("/groups")} onClick={() => setAdminOpen(false)}>
+                      Groups
                     </Link>
                     <Link href="/clients" className={dropdownLinkClass("/clients")} onClick={() => setAdminOpen(false)}>
                       Clients

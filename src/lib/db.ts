@@ -1,5 +1,6 @@
 import { createClient } from "@libsql/client";
 import { hashPassword } from "@/lib/password";
+import { STAFF_DEFAULT_PAGES, BILLING_DEFAULT_PAGES, SECURITY_DEFAULT_PAGES } from "@/lib/pages";
 
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL || "file:data/henry-mcs.db",
@@ -218,6 +219,30 @@ async function ensureInit() {
   try { await db.execute("DROP TABLE IF EXISTS template_variables"); } catch { /* ignore */ }
   try { await db.execute("DROP TABLE IF EXISTS template_variables_legacy"); } catch { /* ignore */ }
 
+  // Security groups
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS group_pages (
+      group_id INTEGER NOT NULL REFERENCES groups(id),
+      page_key TEXT NOT NULL,
+      PRIMARY KEY (group_id, page_key)
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS user_groups (
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      group_id INTEGER NOT NULL REFERENCES groups(id),
+      PRIMARY KEY (user_id, group_id)
+    )
+  `);
+
   // Matrix extraction templates (per-user)
   await db.execute(`
     CREATE TABLE IF NOT EXISTS matrix_templates (
@@ -282,6 +307,27 @@ async function ensureInit() {
   const pbCount = await db.execute("SELECT COUNT(*) as count FROM playbooks");
   if ((pbCount.rows[0].count as number) === 0) {
     await seedPlaybooks();
+  }
+
+  // Seed default groups if none exist
+  const groupCount = await db.execute("SELECT COUNT(*) as count FROM groups");
+  if ((groupCount.rows[0].count as number) === 0) {
+    await seedGroups();
+  }
+
+  // Auto-assign existing non-admin users to the default group if unassigned
+  const defaultGroupRow = await db.execute("SELECT id FROM groups WHERE is_default = 1 LIMIT 1");
+  if (defaultGroupRow.rows.length > 0) {
+    const defaultGroupId = defaultGroupRow.rows[0].id as number;
+    const unassigned = await db.execute(`
+      SELECT id FROM users WHERE role = 'user'
+      AND id NOT IN (SELECT user_id FROM user_groups)
+    `);
+    for (const row of unassigned.rows) {
+      try {
+        await db.execute({ sql: "INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)", args: [row.id as number, defaultGroupId] });
+      } catch { /* ignore */ }
+    }
   }
 }
 
@@ -387,6 +433,26 @@ async function seedPlaybooks() {
       sql: "INSERT INTO playbook_items (playbook_id, order_num, check_name, instruction) VALUES (?, ?, ?, ?)",
       args: [pb2Id!, orderNum, checkName, instruction],
     });
+  }
+}
+
+async function seedGroups() {
+  const staffResult = await db.execute({ sql: "INSERT INTO groups (name, is_default) VALUES (?, 1)", args: ["Staff"] });
+  const staffId = staffResult.lastInsertRowid!;
+  for (const page of STAFF_DEFAULT_PAGES) {
+    await db.execute({ sql: "INSERT INTO group_pages (group_id, page_key) VALUES (?, ?)", args: [staffId, page] });
+  }
+
+  const billingResult = await db.execute({ sql: "INSERT INTO groups (name, is_default) VALUES (?, 0)", args: ["Billing"] });
+  const billingId = billingResult.lastInsertRowid!;
+  for (const page of BILLING_DEFAULT_PAGES) {
+    await db.execute({ sql: "INSERT INTO group_pages (group_id, page_key) VALUES (?, ?)", args: [billingId, page] });
+  }
+
+  const securityResult = await db.execute({ sql: "INSERT INTO groups (name, is_default) VALUES (?, 0)", args: ["Security"] });
+  const securityId = securityResult.lastInsertRowid!;
+  for (const page of SECURITY_DEFAULT_PAGES) {
+    await db.execute({ sql: "INSERT INTO group_pages (group_id, page_key) VALUES (?, ?)", args: [securityId, page] });
   }
 }
 
@@ -1509,4 +1575,95 @@ export async function addWordTemplateFile(
 export async function deleteWordTemplateFile(id: number, matrixTemplateId: number): Promise<void> {
   await ensureInit();
   await db.execute({ sql: "DELETE FROM word_template_files WHERE id = ? AND matrix_template_id = ?", args: [id, matrixTemplateId] });
+}
+
+// ── Security Groups ────────────────────────────────────────────────────────────
+
+export interface Group {
+  id: number;
+  name: string;
+  is_default: number;
+  created_at: string;
+  page_count?: number;
+}
+
+export async function getGroups(): Promise<(Group & { page_count: number })[]> {
+  await ensureInit();
+  const result = await db.execute(
+    `SELECT g.id, g.name, g.is_default, g.created_at, COUNT(gp.page_key) as page_count
+     FROM groups g LEFT JOIN group_pages gp ON gp.group_id = g.id
+     GROUP BY g.id ORDER BY g.name`
+  );
+  return result.rows as unknown as (Group & { page_count: number })[];
+}
+
+export async function getGroup(id: number): Promise<Group | undefined> {
+  await ensureInit();
+  const result = await db.execute({ sql: "SELECT id, name, is_default, created_at FROM groups WHERE id = ?", args: [id] });
+  return (result.rows[0] as unknown as Group) || undefined;
+}
+
+export async function getGroupPages(groupId: number): Promise<string[]> {
+  await ensureInit();
+  const result = await db.execute({ sql: "SELECT page_key FROM group_pages WHERE group_id = ? ORDER BY page_key", args: [groupId] });
+  return result.rows.map(r => r.page_key as string);
+}
+
+export async function setGroupPages(groupId: number, pageKeys: string[]): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM group_pages WHERE group_id = ?", args: [groupId] });
+  for (const key of pageKeys) {
+    await db.execute({ sql: "INSERT INTO group_pages (group_id, page_key) VALUES (?, ?)", args: [groupId, key] });
+  }
+}
+
+export async function createGroup(name: string, pageKeys: string[]): Promise<Group> {
+  await ensureInit();
+  const result = await db.execute({ sql: "INSERT INTO groups (name, is_default) VALUES (?, 0)", args: [name] });
+  const id = Number(result.lastInsertRowid);
+  await setGroupPages(id, pageKeys);
+  return (await getGroup(id))!;
+}
+
+export async function updateGroup(id: number, name: string, pageKeys: string[]): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "UPDATE groups SET name = ? WHERE id = ?", args: [name, id] });
+  await setGroupPages(id, pageKeys);
+}
+
+export async function deleteGroup(id: number): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM group_pages WHERE group_id = ?", args: [id] });
+  await db.execute({ sql: "DELETE FROM user_groups WHERE group_id = ?", args: [id] });
+  await db.execute({ sql: "DELETE FROM groups WHERE id = ?", args: [id] });
+}
+
+export async function getUserGroups(userId: number): Promise<Group[]> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `SELECT g.id, g.name, g.is_default, g.created_at
+          FROM groups g JOIN user_groups ug ON ug.group_id = g.id
+          WHERE ug.user_id = ? ORDER BY g.name`,
+    args: [userId],
+  });
+  return result.rows as unknown as Group[];
+}
+
+export async function setUserGroups(userId: number, groupIds: number[]): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "DELETE FROM user_groups WHERE user_id = ?", args: [userId] });
+  for (const gid of groupIds) {
+    await db.execute({ sql: "INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)", args: [userId, gid] });
+  }
+}
+
+export async function getUserPages(userId: number): Promise<string[]> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `SELECT DISTINCT gp.page_key
+          FROM user_groups ug JOIN group_pages gp ON gp.group_id = ug.group_id
+          WHERE ug.user_id = ?`,
+    args: [userId],
+  });
+  return result.rows.map(r => r.page_key as string);
 }

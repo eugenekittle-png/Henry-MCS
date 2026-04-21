@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyPassword, setSessionCookie, setPending2faCookie, setPendingSetupCookie } from "@/lib/auth";
-import { getUserByEmail, incrementFailedLogins, resetFailedLogins, getSetting, getUserForAuth, updateLastLogin } from "@/lib/db";
+import { getUserByEmail, incrementFailedLogins, resetFailedLogins, getSetting, getUserForAuth, updateLastLogin, getUserPages } from "@/lib/db";
 import { logAction, getClientIp } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
@@ -65,8 +65,9 @@ export async function POST(request: NextRequest) {
 
   // No 2FA required — issue full session
   await updateLastLogin(user.id);
-  await setSessionCookie({ userId: user.id, username: user.username, email: user.email, role: user.role as "admin" | "user", mustChangePassword: user.must_change_password });
+  const pages = await getUserPages(user.id);
+  await setSessionCookie({ userId: user.id, username: user.username, email: user.email, role: user.role as "admin" | "user", mustChangePassword: user.must_change_password, pages });
   await logAction({ username: user.email, action: "Login", details: { role: user.role }, success: true, ipAddress: ip });
 
-  return NextResponse.json({ ok: true, username: user.username, email: user.email, role: user.role, mustChangePassword: user.must_change_password });
+  return NextResponse.json({ ok: true, username: user.username, email: user.email, role: user.role, mustChangePassword: user.must_change_password, pages });
 }

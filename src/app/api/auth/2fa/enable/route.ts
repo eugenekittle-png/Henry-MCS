@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest, getPendingSetupUserId, clearPendingCookies, setSessionCookie } from "@/lib/auth";
-import { getUserForAuth, setUserTotp } from "@/lib/db";
+import { getUserForAuth, setUserTotp, getUserPages } from "@/lib/db";
 import { verifyToken } from "@/lib/totp";
 
 async function hashCode(code: string): Promise<string> {
@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
     const user = await getUserForAuth(userId);
     if (user) {
       await clearPendingCookies();
-      await setSessionCookie({ userId: user.id, username: user.username, email: user.email ?? "", role: user.role as "admin" | "user", mustChangePassword: !!user.must_change_password });
+      const pages = await getUserPages(user.id);
+      await setSessionCookie({ userId: user.id, username: user.username, email: user.email ?? "", role: user.role as "admin" | "user", mustChangePassword: !!user.must_change_password, pages });
     }
   }
 

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, hasPage } from "@/lib/auth";
 import { getUsageByUser, getUsageByClient, getUsageByMatter, getAuditLogsFiltered, getAuditLogsFilteredCount } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
-  if (!session || session.role !== "admin") {
+  if (!session || !hasPage(session, "usage")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 

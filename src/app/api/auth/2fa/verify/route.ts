@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPending2faUserId, clearPendingCookies, setSessionCookie } from "@/lib/auth";
-import { getUserForAuth, updateUserBackupCodes, updateLastLogin } from "@/lib/db";
+import { getUserForAuth, updateUserBackupCodes, updateLastLogin, getUserPages } from "@/lib/db";
 import { verifyToken } from "@/lib/totp";
 import { logAction, getClientIp } from "@/lib/audit";
 
@@ -27,9 +27,10 @@ export async function POST(req: NextRequest) {
   if (isValidTotp) {
     await updateLastLogin(user.id);
     await clearPendingCookies();
-    await setSessionCookie({ userId: user.id, username: user.username, email: user.email ?? "", role: user.role as "admin" | "user", mustChangePassword: !!user.must_change_password });
+    const pages = await getUserPages(user.id);
+    await setSessionCookie({ userId: user.id, username: user.username, email: user.email ?? "", role: user.role as "admin" | "user", mustChangePassword: !!user.must_change_password, pages });
     await logAction({ username: user.email ?? user.username, action: "Login", details: { step: "2fa-verified" }, success: true, ipAddress: ip });
-    return NextResponse.json({ ok: true, username: user.username, email: user.email ?? "", role: user.role, mustChangePassword: !!user.must_change_password });
+    return NextResponse.json({ ok: true, username: user.username, email: user.email ?? "", role: user.role, mustChangePassword: !!user.must_change_password, pages });
   }
 
   // Try backup codes
@@ -43,7 +44,8 @@ export async function POST(req: NextRequest) {
     await updateUserBackupCodes(userId, JSON.stringify(remaining));
     await updateLastLogin(user.id);
     await clearPendingCookies();
-    await setSessionCookie({ userId: user.id, username: user.username, email: user.email ?? "", role: user.role as "admin" | "user", mustChangePassword: !!user.must_change_password });
+    const pages2 = await getUserPages(user.id);
+    await setSessionCookie({ userId: user.id, username: user.username, email: user.email ?? "", role: user.role as "admin" | "user", mustChangePassword: !!user.must_change_password, pages: pages2 });
     await logAction({ username: user.email ?? user.username, action: "Login", details: { step: "2fa-backup-code-used", remaining: remaining.length }, success: true, ipAddress: ip });
     return NextResponse.json({ ok: true, username: user.username, email: user.email ?? "", role: user.role, mustChangePassword: !!user.must_change_password, usedBackupCode: true, remainingBackupCodes: remaining.length });
   }

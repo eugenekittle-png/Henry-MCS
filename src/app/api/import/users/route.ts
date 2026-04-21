@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { parseCSV } from "@/lib/csv";
 import { hashPassword, validatePassword } from "@/lib/password";
-import { dbImportUser } from "@/lib/db";
+import { dbImportUser, getGroups, setUserGroups, getUserByEmail } from "@/lib/db";
 import { logAction, getClientIp } from "@/lib/audit";
 
 const TEMP_PASSWORD = "Welcome1!";
@@ -65,6 +65,15 @@ export async function POST(req: NextRequest) {
     try {
       await dbImportUser(email, passwordHash, role, first_name, last_name, mustChange);
       imported++;
+      // Assign to default group if a user role
+      if (role === "user") {
+        const groups = await getGroups();
+        const defaultGroup = groups.find(g => g.is_default);
+        if (defaultGroup) {
+          const created = await getUserByEmail(email);
+          if (created) await setUserGroups(created.id, [defaultGroup.id]);
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("UNIQUE") || msg.includes("unique")) {

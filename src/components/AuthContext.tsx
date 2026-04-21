@@ -6,12 +6,13 @@ interface AuthUser {
   username: string; // Principal ID
   email: string;
   role: "admin" | "user";
+  pages: string[]; // page keys the user can access; empty means admin (no restriction)
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (username: string, email: string, role: "admin" | "user") => void;
+  login: (username: string, email: string, role: "admin" | "user", pages?: string[]) => void;
   logout: () => Promise<void>;
 }
 
@@ -24,13 +25,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch("/api/auth/me")
       .then(res => (res.ok ? res.json() : null))
-      .then(data => setUser(data?.user ? { username: data.user.username, email: data.user.email ?? "", role: data.user.role } : null))
+      .then(data => setUser(data?.user ? { username: data.user.username, email: data.user.email ?? "", role: data.user.role, pages: data.user.pages ?? [] } : null))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback((username: string, email: string, role: "admin" | "user") => {
-    setUser({ username, email, role });
+  const login = useCallback((username: string, email: string, role: "admin" | "user", pages: string[] = []) => {
+    setUser({ username, email, role, pages });
   }, []);
 
   const logout = useCallback(async () => {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, verifyPassword, hashPassword, setSessionCookie } from "@/lib/auth";
-import { getUserForAuth, updateUserPassword } from "@/lib/db";
+import { getUserForAuth, updateUserPassword, getUserPages } from "@/lib/db";
 import { validatePassword } from "@/lib/password";
 import { logAction, getClientIp } from "@/lib/audit";
 
@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
   const passwordHash = await hashPassword(password);
   await updateUserPassword(session.userId, passwordHash, false);
 
-  await setSessionCookie({ userId: session.userId, username: session.username, email: session.email, role: session.role, mustChangePassword: false });
+  const pages = await getUserPages(session.userId);
+  await setSessionCookie({ userId: session.userId, username: session.username, email: session.email, role: session.role, mustChangePassword: false, pages });
   await logAction({ username: session.email, action: "Change-Password", success: true, ipAddress: ip });
 
   return NextResponse.json({ ok: true });

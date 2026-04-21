@@ -15,7 +15,14 @@ export interface SessionPayload {
   email: string;
   role: UserRole;
   mustChangePassword: boolean;
+  pages: string[]; // page keys the user can access (empty for admin — admin bypasses all checks)
   exp: number;
+}
+
+// Admin always has access; non-admins must have the page in their session
+export function hasPage(session: SessionPayload, pageKey: string): boolean {
+  if (session.role === "admin") return true;
+  return session.pages.includes(pageKey);
 }
 
 // --- Session signing key ---

@@ -46,6 +46,7 @@ export async function PATCH(req: NextRequest) {
       email: email?.trim() || session.email,
       role: session.role,
       mustChangePassword: session.mustChangePassword,
+      pages: session.pages ?? [],
     });
   }
 

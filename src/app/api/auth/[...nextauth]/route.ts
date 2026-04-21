@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
 import { AZURE_CONFIGURED, azureAuthConfig } from "@/lib/azure-auth";
-import { upsertAzureUser } from "@/lib/db";
+import { upsertAzureUser, getUserPages, getGroups, setUserGroups } from "@/lib/db";
 import { setSessionCookie } from "@/lib/auth";
 import { logAction } from "@/lib/audit";
 
@@ -36,8 +36,16 @@ const handler = AZURE_CONFIGURED && azureAuthConfig
               if (lockedUntil > new Date()) return false;
             }
 
+            // Auto-assign new users to the default group
+            if (user.isNew && user.role === "user") {
+              const groups = await getGroups();
+              const defaultGroup = groups.find(g => g.is_default);
+              if (defaultGroup) await setUserGroups(user.id, [defaultGroup.id]);
+            }
+
             // Issue the app's own session cookie so the rest of the app works normally
-            await setSessionCookie({ userId: user.id, username: user.username, email: user.email, role: user.role, mustChangePassword: false });
+            const pages = await getUserPages(user.id);
+            await setSessionCookie({ userId: user.id, username: user.username, email: user.email, role: user.role, mustChangePassword: false, pages });
             await logAction({ username: user.email, action: "Login", details: { provider: "azure" }, success: true });
             return true;
           } catch (err) {
