@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createChatStream, parseApiError } from "@/lib/anthropic";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getSessionFromRequest, hasPage } from "@/lib/auth";
 import { detectSuspicious } from "@/lib/security";
 import { logAction, getClientIp } from "@/lib/audit";
 
@@ -28,6 +28,7 @@ Only include the citations section when you actually have citations to list.`;
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   const ip = getClientIp(req);
+  if (!session || !hasPage(session, "assist")) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const { messages, source, clientNumber, matterNumber } = await req.json();

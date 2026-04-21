@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getSessionFromRequest, hasPage } from "@/lib/auth";
 import { getMatrixTemplate, getMatrixTemplateColumns } from "@/lib/db";
 import { parseFile } from "@/lib/parsers";
 import Anthropic from "@anthropic-ai/sdk";
@@ -81,7 +81,7 @@ Return ONLY a valid JSON object with the same column names as keys and synthesiz
 
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
-  if (!session) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  if (!session || !hasPage(session, "matrix")) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
 
   const formData = await req.formData();
   const templateId = Number(formData.get("templateId"));

@@ -157,7 +157,7 @@ export default function Navbar() {
             {toolsOpen && (
               <div className="absolute left-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                 <p className="px-4 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                  {pins.length} / {MAX_PINS} pinned to navbar
+                  {visibleTools.filter(t => pins.includes(t.key)).length} / {MAX_PINS} pinned to navbar
                 </p>
                 <div className="border-t border-gray-100 mb-1" />
                 {visibleTools.map((tool) => {

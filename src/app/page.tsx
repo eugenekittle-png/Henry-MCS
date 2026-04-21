@@ -216,7 +216,65 @@ function LandingPage() {
   );
 }
 
-function Dashboard() {
+const TOOL_CARDS = [
+  {
+    key: "assist",
+    href: "/assist",
+    color: "indigo",
+    hoverBorder: "hover:border-indigo-300",
+    iconBg: "bg-indigo-100",
+    iconHoverBg: "group-hover:bg-indigo-200",
+    iconColor: "text-indigo-600",
+    title: "Assist",
+    desc: "Ask questions, analyze documents, and explore any topic with a conversational AI assistant built for law firm workflows.",
+    note: "Documents optional — supports PDF, DOCX, XLSX, TXT and more",
+    iconPath: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z",
+  },
+  {
+    key: "breakdown",
+    href: "/breakdown",
+    color: "green",
+    hoverBorder: "hover:border-green-300",
+    iconBg: "bg-green-100",
+    iconHoverBg: "group-hover:bg-green-200",
+    iconColor: "text-green-600",
+    title: "Breakdown",
+    desc: "Upload a zip file of documents and get an organized catalog with summaries, themes, and connections between files.",
+    note: "Supports ZIP",
+    iconPath: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
+  },
+  {
+    key: "compare",
+    href: "/compare",
+    color: "purple",
+    hoverBorder: "hover:border-purple-300",
+    iconBg: "bg-purple-100",
+    iconHoverBg: "group-hover:bg-purple-200",
+    iconColor: "text-purple-600",
+    title: "Compare",
+    desc: "Upload two documents and get a detailed AI-generated comparison highlighting similarities, differences, and key changes.",
+    note: "Supports PDF, DOC, DOCX",
+    iconPath: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
+  },
+  {
+    key: "matrix",
+    href: "/matrix",
+    color: "orange",
+    hoverBorder: "hover:border-orange-300",
+    iconBg: "bg-orange-100",
+    iconHoverBg: "group-hover:bg-orange-200",
+    iconColor: "text-orange-600",
+    title: "Matrix",
+    desc: "Build custom extraction templates with defined columns and extract structured data from multiple documents at once.",
+    note: "Supports PDF, DOCX, TXT and more",
+    iconPath: "M3 10h18M3 14h18M10 3v18M14 3v18M3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z",
+  },
+];
+
+function Dashboard({ user }: { user: { role: string; pages: string[] } }) {
+  const isAdmin = user.role === "admin";
+  const visibleCards = TOOL_CARDS.filter(t => isAdmin || user.pages.includes(t.key));
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-16">
       <div className="text-center mb-12">
@@ -224,71 +282,31 @@ function Dashboard() {
         <p className="text-lg text-gray-600">AI-powered tools to assist, break down, compare, and extract from your documents</p>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link
-          href="/assist"
-          className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-indigo-300 transition-all"
-        >
-          <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-indigo-200 transition-colors">
-            <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Assist</h2>
-          <p className="text-gray-600">
-            Ask questions, analyze documents, and explore any topic with a conversational AI assistant built for law firm workflows.
-          </p>
-          <p className="text-sm text-gray-400 mt-4">Documents optional — supports PDF, DOCX, XLSX, TXT and more</p>
-        </Link>
-
-        <Link
-          href="/breakdown"
-          className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-green-300 transition-all"
-        >
-          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-200 transition-colors">
-            <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Breakdown</h2>
-          <p className="text-gray-600">
-            Upload a zip file of documents and get an organized catalog with summaries, themes, and connections between files.
-          </p>
-          <p className="text-sm text-gray-400 mt-4">Supports ZIP</p>
-        </Link>
-
-        <Link
-          href="/compare"
-          className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-purple-300 transition-all"
-        >
-          <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-200 transition-colors">
-            <svg className="w-6 h-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Compare</h2>
-          <p className="text-gray-600">
-            Upload two documents and get a detailed AI-generated comparison highlighting similarities, differences, and key changes.
-          </p>
-          <p className="text-sm text-gray-400 mt-4">Supports PDF, DOC, DOCX</p>
-        </Link>
-
-        <Link
-          href="/matrix"
-          className="group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg hover:border-orange-300 transition-all"
-        >
-          <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-200 transition-colors">
-            <svg className="w-6 h-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M10 3v18M14 3v18M3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Matrix</h2>
-          <p className="text-gray-600">
-            Build custom extraction templates with defined columns and extract structured data from multiple documents at once.
-          </p>
-          <p className="text-sm text-gray-400 mt-4">Supports PDF, DOCX, TXT and more</p>
-        </Link>
-      </div>
+      {visibleCards.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-gray-500 text-lg mb-2">No tools assigned</p>
+          <p className="text-gray-400 text-sm">Contact your administrator to be added to a group.</p>
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {visibleCards.map(card => (
+            <Link
+              key={card.key}
+              href={card.href}
+              className={`group block bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg ${card.hoverBorder} transition-all`}
+            >
+              <div className={`w-12 h-12 ${card.iconBg} rounded-xl flex items-center justify-center mb-4 ${card.iconHoverBg} transition-colors`}>
+                <svg className={`w-6 h-6 ${card.iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.iconPath} />
+                </svg>
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">{card.title}</h2>
+              <p className="text-gray-600">{card.desc}</p>
+              <p className="text-sm text-gray-400 mt-4">{card.note}</p>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -304,5 +322,5 @@ export default function Home() {
     );
   }
 
-  return user ? <Dashboard /> : <LandingPage />;
+  return user ? <Dashboard user={user} /> : <LandingPage />;
 }

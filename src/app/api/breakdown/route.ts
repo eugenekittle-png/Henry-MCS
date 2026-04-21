@@ -4,7 +4,7 @@ import { createChatStream } from "@/lib/anthropic";
 import { BREAKDOWN_SYSTEM_PROMPT, MAX_BREAKDOWN_FILE_SIZE } from "@/lib/constants";
 import type { TextBlockParam, ImageBlockParam } from "@anthropic-ai/sdk/resources/messages";
 import { getClient, getMatter } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession, hasPage } from "@/lib/auth";
 import { logAction, getClientIp } from "@/lib/audit";
 
 export const maxDuration = 300;
@@ -16,6 +16,7 @@ function emit(controller: ReadableStreamDefaultController, encoder: TextEncoder,
 export async function POST(req: NextRequest) {
   const session = await getSession();
   const ip = getClientIp(req);
+  if (!session || !hasPage(session, "breakdown")) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const { blobUrl, fileName, clientId, matterId } = await req.json();
