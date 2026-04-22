@@ -15,9 +15,7 @@ export const ALL_PAGES: PageDef[] = [
   { key: "breakdown",   label: "Breakdown",       group: "tools" },
   { key: "compare",     label: "Compare",         group: "tools" },
   { key: "summary",     label: "Summary",         group: "tools" },
-  { key: "review",      label: "Review",          group: "tools" },
   { key: "matrix",      label: "Matrix",          group: "tools" },
-  { key: "playbooks",   label: "Playbooks",       group: "tools" },
   { key: "suggestions", label: "Feedback Forum",  group: "tools" },
   // Reporting — elevated access
   { key: "audit",       label: "Audit Log",       group: "reporting" },
@@ -26,8 +24,7 @@ export const ALL_PAGES: PageDef[] = [
 
 // Default pages assigned to the Staff group (and any new user)
 export const STAFF_DEFAULT_PAGES = [
-  "assist", "breakdown", "compare", "summary", "review",
-  "matrix", "playbooks", "suggestions",
+  "assist", "breakdown", "compare", "summary", "matrix", "suggestions",
 ];
 
 export const BILLING_DEFAULT_PAGES = [...STAFF_DEFAULT_PAGES, "usage"];

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, hashPassword } from "@/lib/auth";
-import { getUser, updateUserRole, updateUserPassword, deleteUser, resetFailedLogins, disableUserTotp, updateUserProfile, disableUser, setUserGroups, getUserGroups } from "@/lib/db";
+import { getUser, updateUserRole, updateUserPassword, deleteUser, resetFailedLogins, disableUserTotp, updateUserProfile, disableUser, setUserGroups, getUserGroups, setUserTokenLimit } from "@/lib/db";
 import { validatePassword } from "@/lib/password";
 import { logAction, getClientIp } from "@/lib/audit";
 
@@ -18,7 +18,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const { role, password, unlock, disable, enable, disable2fa, email, first_name, last_name, groupIds } = await request.json();
+  const { role, password, unlock, disable, enable, disable2fa, email, first_name, last_name, groupIds, tokenLimit } = await request.json();
   const changes: Record<string, unknown> = { targetUser: user.email ?? user.username };
 
   if (disable) {
@@ -67,6 +67,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     await setUserGroups(userId, groupIds);
     const newGroups = await getUserGroups(userId);
     changes.groupsUpdated = newGroups.map(g => g.name);
+  }
+
+  if (tokenLimit !== undefined) {
+    const limit = tokenLimit === null || tokenLimit === "" ? null : Number(tokenLimit);
+    await setUserTokenLimit(userId, limit);
+    changes.tokenLimitUpdated = limit ?? "default";
   }
 
   await logAction({ username: session.email, action: "User-Update", details: changes, success: true, ipAddress: ip });

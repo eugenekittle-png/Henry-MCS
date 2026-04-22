@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getUsageForUser, getUsageForUserByClient, getUsageForUserByMatter, getAuditLogsFiltered, getAuditLogsFilteredCount } from "@/lib/db";
+import { getUsageForUser, getUsageForUserByClient, getUsageForUserByMatter, getAuditLogsFiltered, getAuditLogsFilteredCount, getTokensUsedByDay } from "@/lib/db";
+import { checkAiRateLimit } from "@/lib/rateLimit";
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -8,11 +9,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const billableOnly = true;
   const { searchParams } = request.nextUrl;
   const groupBy = searchParams.get("groupBy") ?? "action";
+  const billableOnly = true;
 
   const userEmail = session.email;
+
+  if (groupBy === "ratelimit") {
+    const result = await checkAiRateLimit(session);
+    return NextResponse.json(result);
+  }
+
+  if (groupBy === "daily") {
+    const rows = await getTokensUsedByDay(userEmail, 7);
+    return NextResponse.json({ rows });
+  }
 
   if (groupBy === "log") {
     const from = searchParams.get("from") ?? undefined;

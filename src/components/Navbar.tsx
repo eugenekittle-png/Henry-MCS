@@ -96,7 +96,7 @@ export default function Navbar() {
         : "text-gray-300 hover:text-white hover:bg-white/10"
     }`;
 
-  const isAdminPage = ["/clients", "/matters", "/users", "/audit", "/usage", "/playbooks", "/groups"].includes(pathname);
+  const isAdminPage = ["/clients", "/matters", "/users", "/audit", "/usage", "/groups"].includes(pathname);
   const isReportingPage = ["/audit", "/usage"].some(p => pathname.startsWith(p));
 
   const dropdownLinkClass = (path: string) =>
@@ -290,9 +290,6 @@ export default function Navbar() {
                     </Link>
                     <Link href="/matters" className={dropdownLinkClass("/matters")} onClick={() => setAdminOpen(false)}>
                       Matters
-                    </Link>
-                    <Link href="/playbooks" className={dropdownLinkClass("/playbooks")} onClick={() => setAdminOpen(false)}>
-                      Playbooks
                     </Link>
                     <div className="border-t border-gray-100 my-1" />
                     <Link href="/audit" className={dropdownLinkClass("/audit")} onClick={() => setAdminOpen(false)}>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthContext";
 import { upload } from "@vercel/blob/client";
 import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
@@ -103,6 +105,15 @@ async function streamResponse(
 }
 
 export default function BreakdownPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.role !== "admin" && !user.pages.includes("breakdown")) {
+      router.replace("/");
+    }
+  }, [user, router]);
+
   const [content, setContent] = useSessionState<string>("breakdown:content", "");
   const [selectedClient, setSelectedClient] = useSessionState<Client | null>("breakdown:selectedClient", null);
   const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("breakdown:selectedMatter", null);

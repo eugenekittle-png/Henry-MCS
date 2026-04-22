@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthContext";
 import { downloadCSV } from "@/lib/csv";
 
 interface UsageRow {
@@ -84,6 +86,15 @@ const COL_HEADERS: Record<Exclude<GroupBy, "log">, string> = {
 };
 
 export default function UsagePage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.role !== "admin" && !user.pages.includes("usage")) {
+      router.replace("/");
+    }
+  }, [user, router]);
+
   const [groupBy, setGroupBy] = useState<GroupBy>("user");
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [logRows, setLogRows] = useState<LogRow[]>([]);

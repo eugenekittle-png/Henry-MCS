@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getSessionFromRequest, hasPage } from "@/lib/auth";
+import { checkAiRateLimit } from "@/lib/rateLimit";
 import { parseFile } from "@/lib/parsers";
 import Anthropic from "@anthropic-ai/sdk";
 
@@ -9,7 +10,13 @@ const client = new Anthropic();
 
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session || !hasPage(session, "matrix")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rateLimit = await checkAiRateLimit(session);
+  if (!rateLimit.allowed) {
+    const resetTime = rateLimit.resetsAt ? new Date(rateLimit.resetsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "later";
+    return NextResponse.json({ error: `AI token limit reached. Resets at ${resetTime}.`, rateLimited: true, used: rateLimit.used, limit: rateLimit.limit, resetsAt: rateLimit.resetsAt }, { status: 429 });
+  }
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;

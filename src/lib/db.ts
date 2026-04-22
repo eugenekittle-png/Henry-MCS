@@ -1,6 +1,6 @@
 import { createClient } from "@libsql/client";
 import { hashPassword } from "@/lib/password";
-import { STAFF_DEFAULT_PAGES, BILLING_DEFAULT_PAGES, SECURITY_DEFAULT_PAGES } from "@/lib/pages";
+import { ALL_PAGES, STAFF_DEFAULT_PAGES, BILLING_DEFAULT_PAGES, SECURITY_DEFAULT_PAGES } from "@/lib/pages";
 
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL || "file:data/henry-mcs.db",
@@ -108,6 +108,12 @@ async function ensureInit() {
     )
   `);
 
+  // Seed default AI token rate limit; migrate old 500K default to 1M if it hasn't been customised
+  await db.execute({
+    sql: "INSERT INTO settings (key, value) VALUES ('ai_token_limit_per_6h', '1000000') ON CONFLICT(key) DO UPDATE SET value = '1000000' WHERE settings.value = '500000'",
+    args: [],
+  });
+
   // Create audit_logs table if missing
   await db.execute(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -121,26 +127,6 @@ async function ensureInit() {
       tokens_input INTEGER,
       tokens_output INTEGER,
       success INTEGER NOT NULL DEFAULT 1
-    )
-  `);
-
-  // Create playbooks tables if missing
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS playbooks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      description TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS playbook_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      playbook_id INTEGER NOT NULL REFERENCES playbooks(id),
-      order_num INTEGER NOT NULL DEFAULT 0,
-      check_name TEXT NOT NULL,
-      instruction TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
     )
   `);
 
@@ -164,6 +150,9 @@ async function ensureInit() {
       // column already exists
     }
   }
+
+  // Migrate: add AI token limit override column to users
+  try { await db.execute("ALTER TABLE users ADD COLUMN ai_token_limit INTEGER"); } catch { /* already exists */ }
 
   // Migrate: add Azure/federated SSO columns to users table
   for (const stmt of [
@@ -303,32 +292,20 @@ async function ensureInit() {
     await seed();
   }
 
-  // Seed playbooks if empty
-  const pbCount = await db.execute("SELECT COUNT(*) as count FROM playbooks");
-  if ((pbCount.rows[0].count as number) === 0) {
-    await seedPlaybooks();
-  }
-
   // Seed default groups if none exist
   const groupCount = await db.execute("SELECT COUNT(*) as count FROM groups");
   if ((groupCount.rows[0].count as number) === 0) {
     await seedGroups();
   }
 
-  // Auto-assign existing non-admin users to the default group if unassigned
-  const defaultGroupRow = await db.execute("SELECT id FROM groups WHERE is_default = 1 LIMIT 1");
-  if (defaultGroupRow.rows.length > 0) {
-    const defaultGroupId = defaultGroupRow.rows[0].id as number;
-    const unassigned = await db.execute(`
-      SELECT id FROM users WHERE role = 'user'
-      AND id NOT IN (SELECT user_id FROM user_groups)
-    `);
-    for (const row of unassigned.rows) {
-      try {
-        await db.execute({ sql: "INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)", args: [row.id as number, defaultGroupId] });
-      } catch { /* ignore */ }
-    }
-  }
+  // Remove any group_pages entries for page keys no longer in ALL_PAGES
+  const validKeys = ALL_PAGES.map(p => p.key);
+  const placeholders = validKeys.map(() => "?").join(", ");
+  await db.execute({
+    sql: `DELETE FROM group_pages WHERE page_key NOT IN (${placeholders})`,
+    args: validKeys,
+  });
+
 }
 
 async function seedUsers() {
@@ -386,56 +363,6 @@ async function seed() {
   }
 }
 
-async function seedPlaybooks() {
-  const pb1 = await db.execute({
-    sql: "INSERT INTO playbooks (name, description) VALUES (?, ?)",
-    args: ["NDA Review", "Standard non-disclosure agreement review checklist"],
-  });
-  const pb1Id = pb1.lastInsertRowid;
-  const ndaItems = [
-    [0, "Parties", "Identify the Disclosing Party and Receiving Party. Are they clearly and correctly defined?"],
-    [1, "Definition of Confidential Information", "How is confidential information defined? Is the definition appropriately broad or narrow? Does it cover oral disclosures?"],
-    [2, "Exclusions from Confidentiality", "Are standard exclusions present — publicly available information, independently developed, received from third parties without restriction, or legally required disclosures?"],
-    [3, "Obligations of Receiving Party", "What obligations does the Receiving Party have regarding use and protection of confidential information? Are use restrictions clear?"],
-    [4, "Permitted Disclosures", "Under what circumstances may confidential information be disclosed (e.g., to employees on a need-to-know basis, affiliates, under legal process)? Are appropriate safeguards required?"],
-    [5, "Term and Survival", "What is the duration of the NDA and the ongoing confidentiality obligations after termination?"],
-    [6, "Return or Destruction", "Is there a requirement to return or destroy confidential materials upon request or termination?"],
-    [7, "Injunctive Relief and Remedies", "Are equitable remedies such as injunctive relief expressly preserved? Is there an acknowledgment that breach would cause irreparable harm?"],
-    [8, "Non-solicitation and Non-compete", "Are there any non-solicitation or non-compete restrictions? If so, are they reasonable in scope, geography, and duration?"],
-    [9, "Governing Law and Jurisdiction", "What law governs the agreement and which courts have jurisdiction?"],
-  ] as const;
-  for (const [orderNum, checkName, instruction] of ndaItems) {
-    await db.execute({
-      sql: "INSERT INTO playbook_items (playbook_id, order_num, check_name, instruction) VALUES (?, ?, ?, ?)",
-      args: [pb1Id!, orderNum, checkName, instruction],
-    });
-  }
-
-  const pb2 = await db.execute({
-    sql: "INSERT INTO playbooks (name, description) VALUES (?, ?)",
-    args: ["MSA Review", "Master services agreement review checklist"],
-  });
-  const pb2Id = pb2.lastInsertRowid;
-  const msaItems = [
-    [0, "Scope of Services", "How are the services defined? Is the scope clear, specific, and unambiguous? Are statements of work or service orders referenced?"],
-    [1, "Payment Terms", "What are the fees, payment schedule, invoicing procedures, and consequences of late payment? Are there provisions for price adjustments?"],
-    [2, "Intellectual Property Ownership", "Who owns IP created under the agreement? Are there license-back provisions? How is background IP treated?"],
-    [3, "Limitation of Liability", "Is there a liability cap? Is it mutual or one-sided? Are there carve-outs for gross negligence, wilful misconduct, or IP indemnification?"],
-    [4, "Indemnification", "What are the indemnification obligations of each party? Are they mutual and proportionate? What is the indemnification procedure?"],
-    [5, "Representations and Warranties", "What representations and warranties does each party make? Are there disclaimers of implied warranties?"],
-    [6, "Confidentiality", "Is there a confidentiality obligation? How long does it survive termination? Does it reference any standalone NDA?"],
-    [7, "Term and Termination", "What is the initial term? What are the rights to terminate for cause or convenience? What notice period is required? What are the post-termination obligations?"],
-    [8, "Governing Law and Dispute Resolution", "What law governs? Is there an arbitration clause or exclusive jurisdiction provision? Is there a mandatory negotiation or mediation step?"],
-    [9, "Force Majeure", "Is there a force majeure clause? Does it appropriately exclude payment obligations? How long must the force majeure event persist before termination rights arise?"],
-  ] as const;
-  for (const [orderNum, checkName, instruction] of msaItems) {
-    await db.execute({
-      sql: "INSERT INTO playbook_items (playbook_id, order_num, check_name, instruction) VALUES (?, ?, ?, ?)",
-      args: [pb2Id!, orderNum, checkName, instruction],
-    });
-  }
-}
-
 async function seedGroups() {
   const staffResult = await db.execute({ sql: "INSERT INTO groups (name, is_default) VALUES (?, 1)", args: ["Staff"] });
   const staffId = staffResult.lastInsertRowid!;
@@ -454,80 +381,6 @@ async function seedGroups() {
   for (const page of SECURITY_DEFAULT_PAGES) {
     await db.execute({ sql: "INSERT INTO group_pages (group_id, page_key) VALUES (?, ?)", args: [securityId, page] });
   }
-}
-
-export async function getPlaybooks(): Promise<{ id: number; name: string; description: string | null; created_at: string; item_count: number }[]> {
-  await ensureInit();
-  const result = await db.execute(
-    `SELECT p.id, p.name, p.description, p.created_at, COUNT(pi.id) as item_count
-     FROM playbooks p
-     LEFT JOIN playbook_items pi ON pi.playbook_id = p.id
-     GROUP BY p.id
-     ORDER BY p.name`
-  );
-  return result.rows as unknown as { id: number; name: string; description: string | null; created_at: string; item_count: number }[];
-}
-
-export async function getPlaybook(id: number): Promise<{ id: number; name: string; description: string | null; created_at: string } | undefined> {
-  await ensureInit();
-  const result = await db.execute({
-    sql: "SELECT id, name, description, created_at FROM playbooks WHERE id = ?",
-    args: [id],
-  });
-  return (result.rows[0] as unknown as { id: number; name: string; description: string | null; created_at: string }) || undefined;
-}
-
-export async function createPlaybook(name: string, description: string): Promise<{ id: number; name: string; description: string | null; created_at: string } | undefined> {
-  await ensureInit();
-  const result = await db.execute({
-    sql: "INSERT INTO playbooks (name, description) VALUES (?, ?)",
-    args: [name, description],
-  });
-  return getPlaybook(Number(result.lastInsertRowid));
-}
-
-export async function updatePlaybook(id: number, name: string, description: string): Promise<void> {
-  await ensureInit();
-  await db.execute({
-    sql: "UPDATE playbooks SET name = ?, description = ? WHERE id = ?",
-    args: [name, description, id],
-  });
-}
-
-export async function deletePlaybook(id: number): Promise<void> {
-  await ensureInit();
-  await db.execute({ sql: "DELETE FROM playbook_items WHERE playbook_id = ?", args: [id] });
-  await db.execute({ sql: "DELETE FROM playbooks WHERE id = ?", args: [id] });
-}
-
-export async function getPlaybookItems(playbookId: number): Promise<{ id: number; playbook_id: number; order_num: number; check_name: string; instruction: string }[]> {
-  await ensureInit();
-  const result = await db.execute({
-    sql: "SELECT id, playbook_id, order_num, check_name, instruction FROM playbook_items WHERE playbook_id = ? ORDER BY order_num, id",
-    args: [playbookId],
-  });
-  return result.rows as unknown as { id: number; playbook_id: number; order_num: number; check_name: string; instruction: string }[];
-}
-
-export async function createPlaybookItem(playbookId: number, checkName: string, instruction: string, orderNum: number): Promise<void> {
-  await ensureInit();
-  await db.execute({
-    sql: "INSERT INTO playbook_items (playbook_id, order_num, check_name, instruction) VALUES (?, ?, ?, ?)",
-    args: [playbookId, orderNum, checkName, instruction],
-  });
-}
-
-export async function updatePlaybookItem(id: number, checkName: string, instruction: string, orderNum: number): Promise<void> {
-  await ensureInit();
-  await db.execute({
-    sql: "UPDATE playbook_items SET check_name = ?, instruction = ?, order_num = ? WHERE id = ?",
-    args: [checkName, instruction, orderNum, id],
-  });
-}
-
-export async function deletePlaybookItem(id: number): Promise<void> {
-  await ensureInit();
-  await db.execute({ sql: "DELETE FROM playbook_items WHERE id = ?", args: [id] });
 }
 
 export async function getClients() {
@@ -736,17 +589,17 @@ export async function updateLastLogin(userId: number) {
 
 export async function getAllUsers() {
   await ensureInit();
-  const result = await db.execute("SELECT id, username, email, first_name, last_name, role, created_at, last_login_at, failed_login_attempts, locked_until, totp_enabled FROM users ORDER BY email");
-  return result.rows as unknown as { id: number; username: string; email: string; first_name: string | null; last_name: string | null; role: "admin" | "user"; created_at: string; last_login_at: string | null; failed_login_attempts: number; locked_until: string | null; totp_enabled: number }[];
+  const result = await db.execute("SELECT id, username, email, first_name, last_name, role, created_at, last_login_at, failed_login_attempts, locked_until, totp_enabled, ai_token_limit FROM users ORDER BY email");
+  return result.rows as unknown as { id: number; username: string; email: string; first_name: string | null; last_name: string | null; role: "admin" | "user"; created_at: string; last_login_at: string | null; failed_login_attempts: number; locked_until: string | null; totp_enabled: number; ai_token_limit: number | null }[];
 }
 
 export async function getUser(id: number) {
   await ensureInit();
   const result = await db.execute({
-    sql: "SELECT id, username, email, first_name, last_name, role FROM users WHERE id = ?",
+    sql: "SELECT id, username, email, first_name, last_name, role, ai_token_limit FROM users WHERE id = ?",
     args: [id],
   });
-  return (result.rows[0] as unknown as { id: number; username: string; email: string; first_name: string | null; last_name: string | null; role: "admin" | "user" }) || undefined;
+  return (result.rows[0] as unknown as { id: number; username: string; email: string; first_name: string | null; last_name: string | null; role: "admin" | "user"; ai_token_limit: number | null }) || undefined;
 }
 
 export async function dbCreateUser(email: string, passwordHash: string, role: "admin" | "user", firstName?: string, lastName?: string) {
@@ -1605,8 +1458,9 @@ export async function getGroup(id: number): Promise<Group | undefined> {
 
 export async function getGroupPages(groupId: number): Promise<string[]> {
   await ensureInit();
+  const validKeys = ALL_PAGES.map(p => p.key);
   const result = await db.execute({ sql: "SELECT page_key FROM group_pages WHERE group_id = ? ORDER BY page_key", args: [groupId] });
-  return result.rows.map(r => r.page_key as string);
+  return result.rows.map(r => r.page_key as string).filter(k => validKeys.includes(k));
 }
 
 export async function setGroupPages(groupId: number, pageKeys: string[]): Promise<void> {
@@ -1655,6 +1509,52 @@ export async function setUserGroups(userId: number, groupIds: number[]): Promise
   for (const gid of groupIds) {
     await db.execute({ sql: "INSERT OR IGNORE INTO user_groups (user_id, group_id) VALUES (?, ?)", args: [userId, gid] });
   }
+}
+
+export async function setUserTokenLimit(userId: number, limit: number | null): Promise<void> {
+  await ensureInit();
+  await db.execute({ sql: "UPDATE users SET ai_token_limit = ? WHERE id = ?", args: [limit, userId] });
+}
+
+export async function getTokensUsedIn6Hours(email: string): Promise<number> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `SELECT COALESCE(SUM(tokens_input + tokens_output), 0) as total
+          FROM audit_logs
+          WHERE LOWER(username) = LOWER(?)
+          AND tokens_input IS NOT NULL
+          AND created_at >= datetime('now', '-6 hours')`,
+    args: [email],
+  });
+  return result.rows[0].total as number;
+}
+
+export async function getOldestTokenLogIn6Hours(email: string): Promise<string | null> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `SELECT MIN(created_at) as oldest
+          FROM audit_logs
+          WHERE LOWER(username) = LOWER(?)
+          AND tokens_input IS NOT NULL
+          AND created_at >= datetime('now', '-6 hours')`,
+    args: [email],
+  });
+  return result.rows[0]?.oldest as string | null ?? null;
+}
+
+export async function getTokensUsedByDay(email: string, days = 7): Promise<{ day: string; total: number }[]> {
+  await ensureInit();
+  const result = await db.execute({
+    sql: `SELECT DATE(created_at) as day, COALESCE(SUM(tokens_input + tokens_output), 0) as total
+          FROM audit_logs
+          WHERE LOWER(username) = LOWER(?)
+          AND tokens_input IS NOT NULL
+          AND created_at >= datetime('now', ?)
+          GROUP BY DATE(created_at)
+          ORDER BY day ASC`,
+    args: [email, `-${days - 1} days`],
+  });
+  return result.rows as unknown as { day: string; total: number }[];
 }
 
 export async function getUserPages(userId: number): Promise<string[]> {

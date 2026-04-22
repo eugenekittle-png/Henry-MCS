@@ -97,6 +97,12 @@ export default function MatrixPage() {
   }, []);
 
   useEffect(() => {
+    if (user && user.role !== "admin" && !user.pages.includes("matrix")) {
+      router.replace("/");
+    }
+  }, [user, router]);
+
+  useEffect(() => {
     load(filterClient?.client_number, filterMatter?.matter_number);
   }, [load, filterClient, filterMatter]);
 

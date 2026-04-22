@@ -4,6 +4,9 @@ import { getSession } from "@/lib/auth";
 import { logAction, getClientIp } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   const search = req.nextUrl.searchParams.get("search") ?? "";
   const limit = parseInt(req.nextUrl.searchParams.get("limit") ?? "0", 10) || undefined;
   if (search.length >= 1) {

@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import PDFDocument from "pdfkit";
+import { getSession } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const { markdown, clientMatter } = await req.json();
 

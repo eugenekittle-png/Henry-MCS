@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthContext";
 import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
@@ -12,6 +14,15 @@ import type { EdgarFiling } from "@/components/EdgarBrowser";
 import type { Client, Matter } from "@/types";
 
 export default function SummaryPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.role !== "admin" && !user.pages.includes("summary")) {
+      router.replace("/");
+    }
+  }, [user, router]);
+
   const [content, setContent] = useSessionState<string>("summary:content", "");
   const [selectedClient, setSelectedClient] = useSessionState<Client | null>("summary:selectedClient", null);
   const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("summary:selectedMatter", null);

@@ -3,6 +3,7 @@ import { createStream, parseApiError, isOverloadedError } from "@/lib/anthropic"
 import { ASSIST_SYSTEM_PROMPT } from "@/lib/constants";
 import { getSessionFromRequest } from "@/lib/auth";
 import { logAction, getClientIp } from "@/lib/audit";
+import { checkAiRateLimit } from "@/lib/rateLimit";
 
 export const maxDuration = 300;
 
@@ -12,6 +13,12 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   const ip = getClientIp(req);
+
+  const rateLimit = await checkAiRateLimit(session);
+  if (!rateLimit.allowed) {
+    const resetTime = rateLimit.resetsAt ? new Date(rateLimit.resetsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "later";
+    return Response.json({ error: `AI token limit reached. Resets at ${resetTime}.`, rateLimited: true, used: rateLimit.used, limit: rateLimit.limit, resetsAt: rateLimit.resetsAt }, { status: 429 });
+  }
 
   try {
     const { text, prompt, client, matter, clientNumber, matterNumber } = await req.json();

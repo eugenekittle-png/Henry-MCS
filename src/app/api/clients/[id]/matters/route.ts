@@ -7,6 +7,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getSession();
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   const { id } = await params;
   const clientId = parseInt(id, 10);
   if (isNaN(clientId)) {

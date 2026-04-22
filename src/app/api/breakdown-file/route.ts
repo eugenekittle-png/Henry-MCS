@@ -7,6 +7,7 @@ import { SUMMARY_SYSTEM_PROMPT, IMAGE_ANALYSIS_SYSTEM_PROMPT, MAX_BREAKDOWN_FILE
 import { getClient, getMatter } from "@/lib/db";
 import { getSession, hasPage } from "@/lib/auth";
 import { logAction, getClientIp } from "@/lib/audit";
+import { checkAiRateLimit } from "@/lib/rateLimit";
 
 export const maxDuration = 300;
 
@@ -18,6 +19,12 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   const ip = getClientIp(req);
   if (!session || !hasPage(session, "breakdown")) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rateLimit = await checkAiRateLimit(session);
+  if (!rateLimit.allowed) {
+    const resetTime = rateLimit.resetsAt ? new Date(rateLimit.resetsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "later";
+    return Response.json({ error: `AI token limit reached. Resets at ${resetTime}.`, rateLimited: true, used: rateLimit.used, limit: rateLimit.limit, resetsAt: rateLimit.resetsAt }, { status: 429 });
+  }
 
   try {
     const { blobUrl, zipFileName, filePath, clientId, matterId } = await req.json();

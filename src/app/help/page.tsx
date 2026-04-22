@@ -103,10 +103,21 @@ function OverviewVideoLink() {
   );
 }
 
+const TOOL_SECTIONS = [
+  { key: "assist",    href: "#assist",    label: "Assist",    color: "bg-indigo-100 text-indigo-700 hover:bg-indigo-200" },
+  { key: "breakdown", href: "#breakdown", label: "Breakdown", color: "bg-green-100 text-green-700 hover:bg-green-200" },
+  { key: "compare",   href: "#compare",   label: "Compare",   color: "bg-purple-100 text-purple-700 hover:bg-purple-200" },
+  { key: "matrix",    href: "#matrix",    label: "Matrix",    color: "bg-orange-100 text-orange-700 hover:bg-orange-200" },
+];
+
 export default function HelpPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [showTop, setShowTop] = useState(false);
+
+  const isAdmin = user?.role === "admin";
+  const canSee = (key: string) => isAdmin || (user?.pages ?? []).includes(key);
+  const visibleSections = TOOL_SECTIONS.filter(t => canSee(t.key));
 
   useEffect(() => {
     function onScroll() { setShowTop(window.scrollY > 300); }
@@ -153,30 +164,33 @@ export default function HelpPage() {
         </p>
 
         {/* Section nav */}
-        <div className="flex flex-wrap gap-2 mt-5">
-          {[
-            { href: "#assist", label: "Assist", color: "bg-indigo-100 text-indigo-700 hover:bg-indigo-200" },
-            { href: "#breakdown", label: "Breakdown", color: "bg-green-100 text-green-700 hover:bg-green-200" },
-            { href: "#compare", label: "Compare", color: "bg-purple-100 text-purple-700 hover:bg-purple-200" },
-            { href: "#matrix", label: "Matrix", color: "bg-orange-100 text-orange-700 hover:bg-orange-200" },
-          ].map(({ href, label, color }) => (
-            <a
-              key={href}
-              href={href}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${color}`}
-            >
-              {label}
-            </a>
-          ))}
-        </div>
+        {visibleSections.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-5">
+            {visibleSections.map(({ href, label, color }) => (
+              <a
+                key={href}
+                href={href}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${color}`}
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+        )}
 
         {/* Overview video link */}
         <OverviewVideoLink />
       </div>
 
+      {visibleSections.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-lg mb-1">No tools assigned</p>
+          <p className="text-sm">Contact your administrator to be added to a group.</p>
+        </div>
+      ) : (
       <div className="space-y-12">
         {/* ── Assist ─────────────────────────────────────────────── */}
-        <Section id="assist" title="Assist" color="bg-indigo-500">
+        {canSee("assist") && <Section id="assist" title="Assist" color="bg-indigo-500">
           <p className="text-sm text-gray-600 mb-4">
             Conversational AI for document Q&amp;A and general legal research. Documents are optional - use Assist to ask questions with or without uploading files.
           </p>
@@ -198,10 +212,10 @@ export default function HelpPage() {
             <Tip text="Use New Conversation to clear the session and start fresh - context does not carry between conversations." />
             <Tip text="The more specific your question, the more precise the response." />
           </ul>
-        </Section>
+        </Section>}
 
         {/* ── Breakdown ──────────────────────────────────────────── */}
-        <Section id="breakdown" title="Breakdown" color="bg-green-500">
+        {canSee("breakdown") && <Section id="breakdown" title="Breakdown" color="bg-green-500">
           <p className="text-sm text-gray-600 mb-4">
             Upload a ZIP archive of documents and receive an organised catalog with individual summaries, identified themes, and connections across files.
           </p>
@@ -223,10 +237,10 @@ export default function HelpPage() {
             <Tip text="Supported formats inside the ZIP: PDF, DOCX, XLSX, TXT, CSV." />
             <Tip text="Nested folders inside the ZIP are supported." />
           </ul>
-        </Section>
+        </Section>}
 
         {/* ── Compare ────────────────────────────────────────────── */}
-        <Section id="compare" title="Compare" color="bg-purple-500">
+        {canSee("compare") && <Section id="compare" title="Compare" color="bg-purple-500">
           <p className="text-sm text-gray-600 mb-4">
             Upload two documents and receive a detailed AI-generated comparison highlighting similarities, differences, and key changes between them.
           </p>
@@ -248,10 +262,10 @@ export default function HelpPage() {
             <Tip text="Supports PDF, DOC, and DOCX formats." />
             <Tip text="The order of documents matters - Document 1 is treated as the original, Document 2 as the revised version." />
           </ul>
-        </Section>
+        </Section>}
 
         {/* ── Matrix ─────────────────────────────────────────────── */}
-        <Section id="matrix" title="Matrix" color="bg-orange-500">
+        {canSee("matrix") && <Section id="matrix" title="Matrix" color="bg-orange-500">
           <p className="text-sm text-gray-600 mb-4">
             Matrix is a structured extraction tool. Build a reusable template of named columns, then run it against one or more documents to pull specific information into a table. It can be used as an <strong>extraction tool</strong>, a <strong>document checklist</strong>, or a <strong>structured review framework</strong> - the same template adapts to each use case.
           </p>
@@ -330,8 +344,9 @@ export default function HelpPage() {
             <Tip text="The Consensus row is AI-generated and synthesises across all uploaded documents - useful when values differ between files." />
             <Tip text="Supports up to 50 columns per template." />
           </ul>
-        </Section>
+        </Section>}
       </div>
+      )}
     </div>
   );
 }

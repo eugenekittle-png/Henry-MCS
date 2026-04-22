@@ -3,6 +3,7 @@ import { createChatStream, parseApiError } from "@/lib/anthropic";
 import { getSessionFromRequest, hasPage } from "@/lib/auth";
 import { detectSuspicious } from "@/lib/security";
 import { logAction, getClientIp } from "@/lib/audit";
+import { checkAiRateLimit } from "@/lib/rateLimit";
 
 export const maxDuration = 300;
 
@@ -29,6 +30,12 @@ export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   const ip = getClientIp(req);
   if (!session || !hasPage(session, "assist")) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const rateLimit = await checkAiRateLimit(session);
+  if (!rateLimit.allowed) {
+    const resetTime = rateLimit.resetsAt ? new Date(rateLimit.resetsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "later";
+    return Response.json({ error: `AI token limit reached. Resets at ${resetTime}.`, rateLimited: true, used: rateLimit.used, limit: rateLimit.limit, resetsAt: rateLimit.resetsAt }, { status: 429 });
+  }
 
   try {
     const { messages, source, clientNumber, matterNumber } = await req.json();

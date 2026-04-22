@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getSessionFromRequest, hasPage } from "@/lib/auth";
+import { checkAiRateLimit } from "@/lib/rateLimit";
 import { getMatrixTemplate, getMatrixTemplateColumns } from "@/lib/db";
 import { parseFile } from "@/lib/parsers";
 import Anthropic from "@anthropic-ai/sdk";
@@ -82,6 +83,12 @@ Return ONLY a valid JSON object with the same column names as keys and synthesiz
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session || !hasPage(session, "matrix")) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+
+  const rateLimit = await checkAiRateLimit(session);
+  if (!rateLimit.allowed) {
+    const resetTime = rateLimit.resetsAt ? new Date(rateLimit.resetsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "later";
+    return new Response(JSON.stringify({ error: `AI token limit reached. Resets at ${resetTime}.`, rateLimited: true, used: rateLimit.used, limit: rateLimit.limit, resetsAt: rateLimit.resetsAt }), { status: 429 });
+  }
 
   const formData = await req.formData();
   const templateId = Number(formData.get("templateId"));

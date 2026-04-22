@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import PDFDocument from "pdfkit";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getSessionFromRequest, hasPage } from "@/lib/auth";
 
 interface ExtractionRow {
   filename: string;
@@ -29,7 +29,7 @@ function checkPage(doc: PDFKit.PDFDocument, neededHeight: number) {
 
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
-  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session || !hasPage(session, "matrix")) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const payload: ExportPayload = await req.json();

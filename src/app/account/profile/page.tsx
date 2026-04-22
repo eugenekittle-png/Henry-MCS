@@ -3,6 +3,19 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthContext";
 
+interface RateLimitStatus {
+  allowed: boolean;
+  used: number;
+  limit: number;
+  approaching: boolean;
+  resetsAt: string | null;
+}
+
+interface DailyUsage {
+  day: string;
+  total: number;
+}
+
 export default function ProfilePage() {
   const { user, login } = useAuth();
 
@@ -11,15 +24,26 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [rateLimit, setRateLimit] = useState<RateLimitStatus | null>(null);
+  const [dailyUsage, setDailyUsage] = useState<DailyUsage[]>([]);
 
   useEffect(() => {
     async function load() {
-      const res = await fetch("/api/user/profile");
-      if (res.ok) {
-        const data = await res.json();
+      const [profileRes, rateLimitRes, dailyRes] = await Promise.all([
+        fetch("/api/user/profile"),
+        fetch("/api/my-usage?groupBy=ratelimit"),
+        fetch("/api/my-usage?groupBy=daily"),
+      ]);
+      if (profileRes.ok) {
+        const data = await profileRes.json();
         setFirstName(data.first_name ?? "");
         setLastName(data.last_name ?? "");
         setEmail(data.email ?? "");
+      }
+      if (rateLimitRes.ok) setRateLimit(await rateLimitRes.json());
+      if (dailyRes.ok) {
+        const data = await dailyRes.json();
+        setDailyUsage(data.rows ?? []);
       }
     }
     if (user) load();
@@ -125,6 +149,81 @@ export default function ProfilePage() {
           {user?.username ?? "—"}
         </code>
       </div>
+
+      {/* AI Token Usage Widget — only show for non-admins with a limit */}
+      {user?.role !== "admin" && rateLimit && rateLimit.limit > 0 && (
+        <div className={`mt-6 bg-white rounded-xl p-6 shadow-sm border ${!rateLimit.allowed ? "border-red-300" : rateLimit.approaching ? "border-amber-300" : "border-gray-200"}`}>
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">AI Token Usage</h2>
+          <p className="text-xs text-gray-400 mb-4">Your usage in the current 6-hour window.</p>
+
+          {/* Approaching / limit-reached warning banners */}
+          {!rateLimit.allowed && rateLimit.resetsAt && (
+            <div className="mb-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <p className="text-xs font-medium text-red-700">
+                Token limit reached - AI tools are unavailable until {new Date(rateLimit.resetsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
+              </p>
+            </div>
+          )}
+          {rateLimit.approaching && (
+            <div className="mb-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="text-xs font-medium text-amber-700">
+                You are approaching your token limit. Only {(rateLimit.limit - rateLimit.used).toLocaleString()} tokens remaining in this window.
+              </p>
+            </div>
+          )}
+
+          {/* Progress bar */}
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-600">
+                {rateLimit.used.toLocaleString()} of {rateLimit.limit.toLocaleString()} tokens used
+              </span>
+              <span className="text-xs text-gray-500">
+                {Math.round((rateLimit.used / rateLimit.limit) * 100)}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5">
+              <div
+                className={`h-2.5 rounded-full transition-all ${!rateLimit.allowed ? "bg-red-500" : rateLimit.approaching ? "bg-amber-400" : rateLimit.used / rateLimit.limit > 0.75 ? "bg-yellow-300" : "bg-blue-500"}`}
+                style={{ width: `${Math.min(100, Math.round((rateLimit.used / rateLimit.limit) * 100))}%` }}
+              />
+            </div>
+          </div>
+
+          {/* 7-day bar chart */}
+          {dailyUsage.length > 0 && (() => {
+            // Fill in all 7 days including days with zero usage
+            const days: { label: string; total: number }[] = [];
+            for (let i = 6; i >= 0; i--) {
+              const d = new Date();
+              d.setDate(d.getDate() - i);
+              const key = d.toISOString().slice(0, 10);
+              const found = dailyUsage.find(r => r.day === key);
+              days.push({ label: d.toLocaleDateString([], { weekday: "short" }), total: found?.total ?? 0 });
+            }
+            const maxVal = Math.max(...days.map(d => d.total), 1);
+            return (
+              <div className="mt-5">
+                <p className="text-xs font-medium text-gray-500 mb-2">Last 7 days</p>
+                <div className="flex items-end gap-1.5 h-16">
+                  {days.map((d, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                      <div className="w-full flex items-end justify-center" style={{ height: "48px" }}>
+                        <div
+                          className="w-full rounded-t bg-blue-400"
+                          style={{ height: `${Math.max(2, Math.round((d.total / maxVal) * 48))}px` }}
+                          title={`${d.total.toLocaleString()} tokens`}
+                        />
+                      </div>
+                      <span className="text-[10px] text-gray-400">{d.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }

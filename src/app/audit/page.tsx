@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthContext";
 import { downloadCSV } from "@/lib/csv";
 
 interface AuditLog {
@@ -68,6 +70,15 @@ const ACTION_COLORS: Record<string, string> = {
 const PAGE_SIZE = 100;
 
 export default function AuditPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.role !== "admin" && !user.pages.includes("audit")) {
+      router.replace("/");
+    }
+  }, [user, router]);
+
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthContext";
 import { useSessionState } from "@/lib/useSessionState";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
@@ -10,6 +12,15 @@ import type { DiffLine } from "@/components/DiffDisplay";
 import type { Client, Matter } from "@/types";
 
 export default function ComparePage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.role !== "admin" && !user.pages.includes("compare")) {
+      router.replace("/");
+    }
+  }, [user, router]);
+
   const [diffLines, setDiffLines] = useSessionState<DiffLine[]>("compare:diffLines", []);
   const [diffFile1Name, setDiffFile1Name] = useSessionState<string>("compare:diffFile1Name", "");
   const [diffFile2Name, setDiffFile2Name] = useSessionState<string>("compare:diffFile2Name", "");

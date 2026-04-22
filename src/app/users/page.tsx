@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthContext";
 import { downloadCSV } from "@/lib/csv";
 import CsvImport from "@/components/CsvImport";
 
@@ -16,6 +18,7 @@ interface User {
   locked_until: string | null;
   totp_enabled: number;
   last_login_at: string | null;
+  ai_token_limit: number | null;
 }
 
 interface GroupOption {
@@ -27,12 +30,21 @@ interface GroupOption {
 type SortKey = "name" | "email" | "role" | "totp_enabled" | "created_at" | "last_login_at";
 
 export default function UsersPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.role !== "admin") {
+      router.replace("/");
+    }
+  }, [user, router]);
+
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({ first_name: "", last_name: "", email: "", password: "", role: "user" as "admin" | "user" });
-  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", email: "", role: "user" as "admin" | "user", password: "" });
+  const [editForm, setEditForm] = useState({ first_name: "", last_name: "", email: "", role: "user" as "admin" | "user", password: "", tokenLimit: "" });
   const [error, setError] = useState<string | null>(null);
   const [require2fa, setRequire2fa] = useState(false);
   const [require2faSaving, setRequire2faSaving] = useState(false);
@@ -45,8 +57,12 @@ export default function UsersPage() {
       fetch("/api/admin/settings"),
       fetch("/api/groups"),
     ]);
-    const data = await usersRes.json();
-    setUsers(data);
+    if (usersRes.ok) {
+      setUsers(await usersRes.json());
+    } else {
+      const data = await usersRes.json().catch(() => ({}));
+      setError(data.error || "Failed to load users");
+    }
     if (settingsRes.ok) {
       const settings = await settingsRes.json();
       setRequire2fa(settings.require2fa);
@@ -111,7 +127,7 @@ export default function UsersPage() {
 
   const handleEdit = async (user: User) => {
     setEditingId(user.id);
-    setEditForm({ first_name: user.first_name ?? "", last_name: user.last_name ?? "", email: user.email, role: user.role, password: "" });
+    setEditForm({ first_name: user.first_name ?? "", last_name: user.last_name ?? "", email: user.email, role: user.role, password: "", tokenLimit: user.ai_token_limit?.toString() ?? "" });
     setError(null);
     // Load the user's current groups
     const res = await fetch(`/api/users/${user.id}/groups`);
@@ -134,7 +150,7 @@ export default function UsersPage() {
       setError("Password must be at least 8 characters.");
       return;
     }
-    const body: Record<string, unknown> = { role: editForm.role, email: editForm.email, first_name: editForm.first_name, last_name: editForm.last_name, groupIds: editGroupIds };
+    const body: Record<string, unknown> = { role: editForm.role, email: editForm.email, first_name: editForm.first_name, last_name: editForm.last_name, groupIds: editGroupIds, tokenLimit: editForm.tokenLimit === "" ? null : Number(editForm.tokenLimit) };
     if (editForm.password) body.password = editForm.password;
     const res = await fetch(`/api/users/${editingId}`, {
       method: "PUT",
@@ -211,7 +227,7 @@ export default function UsersPage() {
     setEditingId(null);
     setShowAdd(false);
     setForm({ first_name: "", last_name: "", email: "", password: "", role: "user" });
-    setEditForm({ first_name: "", last_name: "", email: "", role: "user", password: "" });
+    setEditForm({ first_name: "", last_name: "", email: "", role: "user", password: "", tokenLimit: "" });
     setEditGroupIds([]);
     setError(null);
   };
@@ -467,6 +483,21 @@ export default function UsersPage() {
                                 </label>
                               ))}
                             </div>
+                          </div>
+                        )}
+                        {editForm.role === "user" && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-600 mb-1.5">AI Token Limit (per 6 hours)</p>
+                            <select
+                              value={editForm.tokenLimit}
+                              onChange={(e) => setEditForm({ ...editForm, tokenLimit: e.target.value })}
+                              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900"
+                            >
+                              <option value="">Default (firm setting, 1M)</option>
+                              <option value="500000">Normal (500K)</option>
+                              <option value="2000000">Heavy (2M)</option>
+                              <option value="0">Unlimited</option>
+                            </select>
                           </div>
                         )}
                         <div className="flex gap-2 pt-1">

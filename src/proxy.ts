@@ -3,7 +3,7 @@ import { verifySessionToken } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/", "/login", "/api/auth/login", "/api/auth/me", "/word-addin", "/api/addin", "/api/chat", "/api/edgar"];
 const CHANGE_PW_PATHS = ["/change-password", "/api/auth/change-password", "/api/auth/logout"];
-const ADMIN_PATHS = ["/clients", "/matters", "/users", "/audit", "/usage", "/api/users", "/api/audit", "/api/usage", "/playbooks"];
+const ADMIN_PATHS = ["/clients", "/matters", "/users", "/audit", "/usage", "/api/users", "/api/audit", "/api/usage"];
 
 const PENDING_2FA_COOKIE = "henry_pending_2fa";
 const PENDING_SETUP_COOKIE = "henry_pending_setup";

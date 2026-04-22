@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthContext";
 import { useSessionState } from "@/lib/useSessionState";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -37,6 +39,15 @@ interface ApiMessage {
 }
 
 export default function AssistPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && user.role !== "admin" && !user.pages.includes("assist")) {
+      router.replace("/");
+    }
+  }, [user, router]);
+
   const [displayMessages, setDisplayMessages] = useSessionState<DisplayMessage[]>("assist:displayMessages", []);
   const [apiHistory, setApiHistory] = useSessionState<ApiMessage[]>("assist:apiHistory", []);
   const [selectedClient, setSelectedClient] = useSessionState<Client | null>("assist:selectedClient", null);
