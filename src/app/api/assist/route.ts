@@ -7,6 +7,7 @@ import { getClient, getMatter } from "@/lib/db";
 import { getSession, hasPage } from "@/lib/auth";
 import { logAction, getClientIp } from "@/lib/audit";
 import { checkAiRateLimit } from "@/lib/rateLimit";
+import { fetchCourtListenerText } from "@/lib/courtlistener";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 
 export const maxDuration = 300;
@@ -106,12 +107,10 @@ export async function POST(req: NextRequest) {
       const courtOpinions = JSON.parse(courtOpinionsRaw) as { clusterId: number; caseName: string; citation: string; court: string; dateFiled: string }[];
       for (const opinion of courtOpinions) {
         const label = `${opinion.caseName}${opinion.citation ? `, ${opinion.citation}` : ""}${opinion.dateFiled ? ` (${opinion.dateFiled})` : ""}`;
-        const contentRes = await fetch(`${req.nextUrl.origin}/api/courtlistener/content?clusterId=${opinion.clusterId}`);
-        if (contentRes.ok) {
-          const { text } = await contentRes.json();
+        const text = await fetchCourtListenerText(opinion.clusterId);
+        if (text) {
           documentContext += `=== ${label} [CourtListener] ===\n${text}\n\n`;
         } else {
-          // Text unavailable — include a reference so Claude can use its training knowledge
           documentContext += `=== ${label} [CourtListener — full text unavailable] ===\n[The full opinion text could not be retrieved from CourtListener. Use your knowledge of this case to assist.]\n\n`;
         }
         courtOpinionNames.push(label);

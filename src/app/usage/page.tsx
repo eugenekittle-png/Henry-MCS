@@ -99,6 +99,8 @@ export default function UsagePage() {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [logRows, setLogRows] = useState<LogRow[]>([]);
   const [logTotal, setLogTotal] = useState(0);
+  const [logTotalInput, setLogTotalInput] = useState(0);
+  const [logTotalOutput, setLogTotalOutput] = useState(0);
   const [logPage, setLogPage] = useState(0);
   const [logFrom, setLogFrom] = useState("");
   const [logTo, setLogTo] = useState("");
@@ -121,6 +123,8 @@ export default function UsagePage() {
       .then(d => {
         setLogRows(d.rows ?? []);
         setLogTotal(d.total ?? 0);
+        setLogTotalInput(d.totalInput ?? 0);
+        setLogTotalOutput(d.totalOutput ?? 0);
         setLogPage(d.page ?? 0);
         setLoading(false);
       });
@@ -304,6 +308,28 @@ export default function UsagePage() {
             )}
             <span className="ml-auto text-xs text-gray-400">{fmt(logTotal)} record{logTotal !== 1 ? "s" : ""}</span>
           </form>
+
+          {/* Token totals for filtered period */}
+          {logTotal > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">AI Requests</p>
+                <p className="text-2xl font-bold text-gray-900">{fmt(logTotal)}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Input Tokens</p>
+                <p className="text-2xl font-bold text-blue-600">{fmt(logTotalInput)}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Output Tokens</p>
+                <p className="text-2xl font-bold text-green-600">{fmt(logTotalOutput)}</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <p className="text-xs text-gray-500 mb-1">Estimated Cost</p>
+                <p className="text-2xl font-bold text-gray-900">{fmtCost(calcCost(logTotalInput, logTotalOutput))}</p>
+              </div>
+            </div>
+          )}
 
           {/* Log table */}
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">

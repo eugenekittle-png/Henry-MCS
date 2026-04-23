@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, hasPage } from "@/lib/auth";
-import { getUsageByUser, getUsageByClient, getUsageByMatter, getAuditLogsFiltered, getAuditLogsFilteredCount } from "@/lib/db";
+import { getUsageByUser, getUsageByClient, getUsageByMatter, getAuditLogsFiltered, getAuditLogsFilteredTotals } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -17,11 +17,11 @@ export async function GET(request: NextRequest) {
     const page = Math.max(0, parseInt(searchParams.get("page") ?? "0", 10));
     const limit = 100;
     const offset = page * limit;
-    const [rows, total] = await Promise.all([
+    const [rows, totals] = await Promise.all([
       getAuditLogsFiltered({ from, to, limit, offset, excludeAuthActions: true, billableOnly: true }),
-      getAuditLogsFilteredCount({ from, to, excludeAuthActions: true, billableOnly: true }),
+      getAuditLogsFilteredTotals({ from, to, excludeAuthActions: true, billableOnly: true }),
     ]);
-    return NextResponse.json({ rows, total, page, limit });
+    return NextResponse.json({ rows, total: totals.count, totalInput: totals.total_input, totalOutput: totals.total_output, page, limit });
   }
 
   let rows;

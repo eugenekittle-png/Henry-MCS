@@ -792,6 +792,37 @@ export async function getAuditLogsFilteredCount(params: { from?: string; to?: st
   return result.rows[0].count as number;
 }
 
+export async function getAuditLogsFilteredTotals(params: { from?: string; to?: string; username?: string; billableOnly?: boolean; excludeAuthActions?: boolean }) {
+  await ensureInit();
+  const { from, to, username, billableOnly = false, excludeAuthActions = false } = params;
+  const conditions: string[] = [];
+  const args: string[] = [];
+
+  if (username) { conditions.push("LOWER(username) = LOWER(?)"); args.push(username); }
+  if (from) { conditions.push("created_at >= ?"); args.push(from); }
+  if (to) { conditions.push("created_at <= ?"); args.push(to + " 23:59:59"); }
+  if (billableOnly) {
+    conditions.push(`LOWER(action) IN (${BILLABLE_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...BILLABLE_ACTIONS);
+    conditions.push("tokens_input IS NOT NULL");
+  }
+  if (excludeAuthActions) {
+    conditions.push(`LOWER(action) NOT IN (${AUTH_ACTIONS.map(() => "?").join(",")})`);
+    args.push(...AUTH_ACTIONS);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) as count, COALESCE(SUM(tokens_input), 0) as total_input, COALESCE(SUM(tokens_output), 0) as total_output FROM audit_logs ${where}`,
+    args,
+  });
+  return {
+    count: result.rows[0].count as number,
+    total_input: result.rows[0].total_input as number,
+    total_output: result.rows[0].total_output as number,
+  };
+}
+
 export async function getUsageByUser() {
   await ensureInit();
   const result = await db.execute({
