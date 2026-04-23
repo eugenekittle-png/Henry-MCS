@@ -9,8 +9,12 @@ import remarkGfm from "remark-gfm";
 import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import ClientMatterSelect from "@/components/ClientMatterSelect";
+import EdgarButton from "@/components/EdgarButton";
+import CourtListenerButton from "@/components/CourtListenerButton";
 import { parseContentAndCitations } from "@/lib/citations";
 import type { Client, Matter } from "@/types";
+import type { EdgarFiling } from "@/components/EdgarBrowser";
+import type { CourtListenerOpinion } from "@/components/CourtListenerBrowser";
 
 async function downloadPdf(markdown: string, clientMatter: { clientName: string; clientNumber: string; matterDescription: string; matterNumber: string } | null) {
   const res = await fetch("/api/export-assist-pdf", {
@@ -53,6 +57,8 @@ export default function AssistPage() {
   const [selectedClient, setSelectedClient] = useSessionState<Client | null>("assist:selectedClient", null);
   const [selectedMatter, setSelectedMatter] = useSessionState<Matter | null>("assist:selectedMatter", null);
   const [files, setFiles] = useState<File[]>([]);
+  const [edgarFilings, setEdgarFilings] = useState<EdgarFiling[]>([]);
+  const [courtOpinions, setCourtOpinions] = useState<CourtListenerOpinion[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +88,24 @@ export default function AssistPage() {
     setFiles(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+  const handleEdgarAdd = useCallback((filing: EdgarFiling) => {
+    if (hasMessages) return;
+    setEdgarFilings(prev => prev.find(f => f.accessionNo === filing.accessionNo) ? prev : [...prev, filing]);
+  }, [hasMessages]);
+
+  const handleEdgarRemove = useCallback((accessionNo: string) => {
+    setEdgarFilings(prev => prev.filter(f => f.accessionNo !== accessionNo));
+  }, []);
+
+  const handleCourtAdd = useCallback((opinion: CourtListenerOpinion) => {
+    if (hasMessages) return;
+    setCourtOpinions(prev => prev.find(o => o.clusterId === opinion.clusterId) ? prev : [...prev, opinion]);
+  }, [hasMessages]);
+
+  const handleCourtRemove = useCallback((clusterId: number) => {
+    setCourtOpinions(prev => prev.filter(o => o.clusterId !== clusterId));
+  }, []);
+
   const handleClientMatterSelect = useCallback((client: Client, matter: Matter) => {
     setSelectedClient(client);
     setSelectedMatter(matter);
@@ -96,6 +120,8 @@ export default function AssistPage() {
     setDisplayMessages([]);
     setApiHistory([]);
     setFiles([]);
+    setEdgarFilings([]);
+    setCourtOpinions([]);
     setInput("");
     setError(null);
   }, []);
@@ -115,9 +141,15 @@ export default function AssistPage() {
     formData.append("clientId", String(selectedClient.id));
     formData.append("matterId", String(selectedMatter.id));
 
-    // Only send files on the first message
+    // Only send files and research sources on the first message
     if (apiHistory.length === 0) {
       files.forEach(f => formData.append("files", f));
+      if (edgarFilings.length > 0) {
+        formData.append("edgarFilings", JSON.stringify(edgarFilings));
+      }
+      if (courtOpinions.length > 0) {
+        formData.append("courtlistenerOpinions", JSON.stringify(courtOpinions));
+      }
     }
 
     if (apiHistory.length > 0) {
@@ -193,7 +225,7 @@ export default function AssistPage() {
     } finally {
       setIsStreaming(false);
     }
-  }, [input, isStreaming, selectedClient, selectedMatter, files, apiHistory]);
+  }, [input, isStreaming, selectedClient, selectedMatter, files, edgarFilings, courtOpinions, apiHistory]);
 
   const QUICK_ACTIONS = [
     {
@@ -254,6 +286,8 @@ export default function AssistPage() {
           <ClientMatterSelect
             onSelect={handleClientMatterSelect}
             onClear={handleClientMatterClear}
+            initialClient={selectedClient ?? undefined}
+            initialMatter={selectedMatter ?? undefined}
           />
         </div>
       ) : selectedClient && selectedMatter && (
@@ -375,7 +409,7 @@ export default function AssistPage() {
           <div className="px-4 py-3 space-y-2 border-b border-gray-100">
             <FileDropZone onFiles={handleFiles} />
             <FileList files={files} onRemove={handleRemoveFile} />
-            {files.length === 0 && (
+            {files.length === 0 && edgarFilings.length === 0 && (
               <p className="text-xs text-gray-400">
                 Documents are optional — you can ask questions without uploading anything.
               </p>
@@ -383,8 +417,41 @@ export default function AssistPage() {
           </div>
         )}
 
-        {/* Quick-action buttons — only when documents are uploaded */}
-        {!hasMessages && files.length > 0 && (
+        {/* Research Sources — locked once conversation starts */}
+        {!hasMessages && (
+          <div className="px-4 py-3 border-b border-gray-100">
+            <div className="flex items-center flex-wrap gap-2">
+              <p className="text-xs text-gray-500 font-medium mr-1">Research Sources</p>
+              <EdgarButton onAdd={handleEdgarAdd} alreadyAdded={edgarFilings.map(f => f.accessionNo)} />
+              <CourtListenerButton onAdd={handleCourtAdd} alreadyAdded={courtOpinions.map(o => String(o.clusterId))} />
+            </div>
+            {(edgarFilings.length > 0 || courtOpinions.length > 0) && (
+              <ul className="mt-2 space-y-1.5">
+                {edgarFilings.map(f => (
+                  <li key={f.accessionNo} className="flex items-center justify-between gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium text-blue-900 truncate block">{f.company}</span>
+                      <span className="text-xs text-blue-600">SEC EDGAR · {f.formType} · Filed {f.filingDate}</span>
+                    </div>
+                    <button onClick={() => handleEdgarRemove(f.accessionNo)} className="text-blue-400 hover:text-blue-700 text-lg leading-none flex-shrink-0">&times;</button>
+                  </li>
+                ))}
+                {courtOpinions.map(o => (
+                  <li key={o.clusterId} className="flex items-center justify-between gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium text-blue-900 truncate block">{o.caseName}</span>
+                      <span className="text-xs text-blue-600">CourtListener{o.citation ? ` · ${o.citation}` : ""}{o.dateFiled ? ` · ${o.dateFiled}` : ""}</span>
+                    </div>
+                    <button onClick={() => handleCourtRemove(o.clusterId)} className="text-blue-400 hover:text-blue-700 text-lg leading-none flex-shrink-0">&times;</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Quick-action buttons — only when documents or research sources are loaded */}
+        {!hasMessages && (files.length > 0 || edgarFilings.length > 0 || courtOpinions.length > 0) && (
           <div className="px-4 py-3 border-b border-gray-100">
             <p className="text-xs text-gray-400 mb-2">Quick actions — click to run instantly</p>
             <div className="flex gap-2 flex-wrap">

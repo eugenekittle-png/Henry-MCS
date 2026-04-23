@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
     const clientId = formData.get("clientId") as string;
     const matterId = formData.get("matterId") as string;
     const files = formData.getAll("files") as File[];
+    const edgarFilingsRaw = formData.get("edgarFilings") as string | null;
+    const courtOpinionsRaw = formData.get("courtlistenerOpinions") as string | null;
 
     if (!prompt) {
       return Response.json({ error: "Prompt is required" }, { status: 400 });
@@ -79,6 +81,41 @@ export async function POST(req: NextRequest) {
         documentContext += `=== ${file.name} ===\n${text}\n\n`;
       }
       fileNames.push(file.name);
+    }
+
+    // Fetch EDGAR filings if provided (first message only)
+    const edgarFilingNames: string[] = [];
+    if (edgarFilingsRaw) {
+      const edgarFilings = JSON.parse(edgarFilingsRaw) as { company: string; cik: string; formType: string; filingDate: string; accessionNo: string; primaryDocument?: string }[];
+      for (const filing of edgarFilings) {
+        const params = new URLSearchParams({ cik: filing.cik, accession: filing.accessionNo });
+        if (filing.primaryDocument) params.set("primaryDocument", filing.primaryDocument);
+        const contentRes = await fetch(`${req.nextUrl.origin}/api/edgar/content?${params}`);
+        if (contentRes.ok) {
+          const { text } = await contentRes.json();
+          const label = `${filing.company} — ${filing.formType} (Filed ${filing.filingDate})`;
+          documentContext += `=== ${label} [SEC EDGAR] ===\n${text}\n\n`;
+          edgarFilingNames.push(label);
+        }
+      }
+    }
+
+    // Fetch CourtListener opinions if provided (first message only)
+    const courtOpinionNames: string[] = [];
+    if (courtOpinionsRaw) {
+      const courtOpinions = JSON.parse(courtOpinionsRaw) as { clusterId: number; caseName: string; citation: string; court: string; dateFiled: string }[];
+      for (const opinion of courtOpinions) {
+        const label = `${opinion.caseName}${opinion.citation ? `, ${opinion.citation}` : ""}${opinion.dateFiled ? ` (${opinion.dateFiled})` : ""}`;
+        const contentRes = await fetch(`${req.nextUrl.origin}/api/courtlistener/content?clusterId=${opinion.clusterId}`);
+        if (contentRes.ok) {
+          const { text } = await contentRes.json();
+          documentContext += `=== ${label} [CourtListener] ===\n${text}\n\n`;
+        } else {
+          // Text unavailable — include a reference so Claude can use its training knowledge
+          documentContext += `=== ${label} [CourtListener — full text unavailable] ===\n[The full opinion text could not be retrieved from CourtListener. Use your knowledge of this case to assist.]\n\n`;
+        }
+        courtOpinionNames.push(label);
+      }
     }
 
     const suspiciousFlags = detectSuspicious(prompt);
@@ -138,6 +175,8 @@ export async function POST(req: NextRequest) {
             details: {
               prompt: suspiciousFlags.length > 0 ? prompt : prompt.slice(0, 200),
               files: fileNames,
+              ...(edgarFilingNames.length > 0 ? { edgarFilings: edgarFilingNames } : {}),
+              ...(courtOpinionNames.length > 0 ? { courtlistener: courtOpinionNames } : {}),
               ...(suspiciousFlags.length > 0 ? { suspicious: true, suspiciousFlags } : {}),
             },
             tokensInput,

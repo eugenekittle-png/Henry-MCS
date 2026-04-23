@@ -139,6 +139,15 @@ async function ensureInit() {
     }
   }
 
+  // Indexes on audit_logs for fast filtering on Audit and Usage pages
+  for (const stmt of [
+    "CREATE INDEX IF NOT EXISTS idx_audit_username ON audit_logs (username)",
+    "CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs (created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (action)",
+  ]) {
+    try { await db.execute(stmt); } catch { /* already exists */ }
+  }
+
   // Migrate: add login lockout columns to users table
   for (const stmt of [
     "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0",
@@ -1037,6 +1046,10 @@ export async function updateSuggestionStatus(id: number, status: SuggestionStatu
     sql: "INSERT INTO suggestion_status_history (suggestion_id, status, comment, changed_by) VALUES (?, ?, ?, ?)",
     args: [id, status, comment?.trim() || null, changedBy],
   });
+  // Refund all votes when a suggestion ships to Production
+  if (status === "Production") {
+    await db.execute({ sql: "DELETE FROM suggestion_votes WHERE suggestion_id = ?", args: [id] });
+  }
 }
 
 export async function deleteSuggestion(id: number): Promise<void> {
