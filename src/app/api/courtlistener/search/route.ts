@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 
 const CL_BASE = "https://www.courtlistener.com/api/rest/v4";
-const MAX_RESULTS = 20;
+const PAGE_SIZE = 20;
 
 function clHeaders(): HeadersInit {
   const key = process.env.COURTLISTENER_API_KEY;
@@ -16,10 +16,11 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
   const court = req.nextUrl.searchParams.get("court") ?? "";
   const precedential = req.nextUrl.searchParams.get("precedential") === "1";
+  const page = Math.max(1, parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10));
   if (!q) return Response.json({ error: "Query required" }, { status: 400 });
 
   try {
-    const params = new URLSearchParams({ q, type: "o", format: "json", page_size: String(MAX_RESULTS) });
+    const params = new URLSearchParams({ q, type: "o", format: "json", page_size: String(PAGE_SIZE), page: String(page) });
     if (court) params.set("court", court);
     if (precedential) params.set("stat_Precedential", "on");
 
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return Response.json({ results, count: data.count ?? results.length });
+    return Response.json({ results, count: data.count ?? results.length, page, hasMore: !!data.next });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Search failed";
     return Response.json({ error: message }, { status: 500 });

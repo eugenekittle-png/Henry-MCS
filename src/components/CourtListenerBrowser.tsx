@@ -34,8 +34,28 @@ export default function CourtListenerBrowser({ onAdd, onClose, alreadyAdded }: P
   const [caseNameMode, setCaseNameMode] = useState(false);
   const [results, setResults] = useState<CourtListenerOpinion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
+  // Keep last search params so Load More can reuse them
+  const [lastQ, setLastQ] = useState("");
+
+  async function fetchPage(q: string, pageNum: number, append: boolean) {
+    const params = new URLSearchParams({ q, page: String(pageNum) });
+    if (court) params.set("court", court);
+    if (precedentialOnly) params.set("precedential", "1");
+    const res = await fetch(`/api/courtlistener/search?${params}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Search failed");
+    const newResults: CourtListenerOpinion[] = data.results ?? [];
+    setResults(prev => append ? [...prev, ...newResults] : newResults);
+    setCount(data.count ?? null);
+    setHasMore(data.hasMore ?? false);
+    setPage(pageNum);
+    if (!append && !newResults.length) setError("No cases found. Try different search terms or uncheck the filters below.");
+  }
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -44,22 +64,27 @@ export default function CourtListenerBrowser({ onAdd, onClose, alreadyAdded }: P
     setError(null);
     setResults([]);
     setCount(null);
+    setHasMore(false);
+    // Case name mode wraps the query so only the case title field is matched
+    const q = caseNameMode ? `caseName:"${query.trim()}"` : query.trim();
+    setLastQ(q);
     try {
-      // Case name mode wraps the query so only the case title field is matched
-      const q = caseNameMode ? `caseName:"${query.trim()}"` : query.trim();
-      const params = new URLSearchParams({ q });
-      if (court) params.set("court", court);
-      if (precedentialOnly) params.set("precedential", "1");
-      const res = await fetch(`/api/courtlistener/search?${params}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Search failed");
-      if (!data.results?.length) setError("No cases found. Try different search terms or uncheck the filters below.");
-      setResults(data.results ?? []);
-      setCount(data.count ?? null);
+      await fetchPage(q, 1, false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleLoadMore() {
+    setLoadingMore(true);
+    try {
+      await fetchPage(lastQ, page + 1, true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load more");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -166,6 +191,16 @@ export default function CourtListenerBrowser({ onAdd, onClose, alreadyAdded }: P
             <p className="text-sm text-gray-400 text-center py-8">
               Search for a case name, citation (e.g. 410 U.S. 113), or legal topic above.
             </p>
+          )}
+
+          {hasMore && !loading && (
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="w-full py-2 text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50 transition-colors"
+            >
+              {loadingMore ? "Loading..." : `Load more (${results.length} of ${count?.toLocaleString()})`}
+            </button>
           )}
         </div>
 

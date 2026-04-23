@@ -32,30 +32,22 @@ export async function GET(req: NextRequest) {
   if (!clusterId) return Response.json({ error: "clusterId is required" }, { status: 400 });
 
   try {
-    // Fetch all opinions for this cluster
-    const res = await fetch(`${CL_BASE}/opinions/?cluster=${clusterId}&format=json`, { headers: clHeaders() });
-    if (!res.ok) throw new Error(`CourtListener API error: ${res.status}`);
+    // Get the opinion stubs for this cluster (list endpoint omits body text fields)
+    const listRes = await fetch(`${CL_BASE}/opinions/?cluster=${clusterId}&format=json&page_size=5`, { headers: clHeaders() });
+    if (!listRes.ok) throw new Error(`CourtListener API error: ${listRes.status}`);
 
-    const data = await res.json();
-    const opinions: Record<string, string>[] = data.results ?? [];
+    const data = await listRes.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stubs: any[] = data.results ?? [];
 
-    // Try each opinion in the cluster for usable text
-    for (const opinion of opinions) {
-      let text = opinion.plain_text?.trim() ?? "";
-      if (!text && opinion.html_with_citations) text = stripHtml(opinion.html_with_citations).trim();
-      if (!text && opinion.html) text = stripHtml(opinion.html).trim();
-      if (text.length > 200) {
-        return Response.json({ text: text.slice(0, MAX_TEXT_LENGTH) });
-      }
-    }
-
-    // Fallback: fetch each opinion URL directly in case the list endpoint omits body fields
-    for (const opinion of opinions) {
-      const opinionUrl = opinion.resource_uri ?? `${CL_BASE}/opinions/${opinion.id}/?format=json`;
-      const opRes = await fetch(opinionUrl, { headers: clHeaders() });
+    // Always fetch each opinion individually — list endpoint never includes body text
+    for (const stub of stubs) {
+      const opId: string | number | undefined = stub.id;
+      if (!opId) continue;
+      const opRes = await fetch(`${CL_BASE}/opinions/${opId}/?format=json`, { headers: clHeaders() });
       if (!opRes.ok) continue;
       const op = await opRes.json();
-      let text = op.plain_text?.trim() ?? "";
+      let text: string = op.plain_text?.trim() ?? "";
       if (!text && op.html_with_citations) text = stripHtml(op.html_with_citations).trim();
       if (!text && op.html) text = stripHtml(op.html).trim();
       if (text.length > 200) {
