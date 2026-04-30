@@ -356,8 +356,13 @@ export default function WordAddinPage() {
         paragraphs.load("text");
         await context.sync();
 
-        // Phase 1: apply text replacements as tracked changes (reverse order preserves indices)
-        context.document.changeTrackingMode = (window as any).Word.ChangeTrackingMode.trackAll;
+        // Phase 1: enable track changes using string literal (enum ref unreliable at runtime)
+        try {
+          context.document.changeTrackingMode = "TrackAll";
+          await context.sync();
+        } catch { /* not supported in this version — changes will still apply without tracking */ }
+
+        // Apply replacements in reverse order to preserve paragraph indices
         const sorted = [...suggestions].sort((a, b) => b.paragraphIndex - a.paragraphIndex);
         for (const s of sorted) {
           if (s.paragraphIndex < paragraphs.items.length) {
@@ -365,17 +370,23 @@ export default function WordAddinPage() {
           }
         }
         await context.sync();
-        context.document.changeTrackingMode = (window as any).Word.ChangeTrackingMode.off;
-        await context.sync();
 
-        // Phase 2: attach comments (if requested) after changes are committed
+        // Disable track changes
+        try {
+          context.document.changeTrackingMode = "Off";
+          await context.sync();
+        } catch { /* ignore */ }
+
+        // Phase 2: attach comments after changes are committed
         if (withComments) {
           const paragraphs2 = body.paragraphs;
           paragraphs2.load("text");
           await context.sync();
           for (const s of suggestions) {
             if (s.paragraphIndex < paragraphs2.items.length) {
-              paragraphs2.items[s.paragraphIndex].getRange().insertComment(s.reason);
+              try {
+                paragraphs2.items[s.paragraphIndex].getRange().insertComment(s.reason);
+              } catch { /* skip paragraphs that don't support comments */ }
             }
           }
           await context.sync();
@@ -383,7 +394,8 @@ export default function WordAddinPage() {
       });
       setSuggestApplied(true);
     } catch (err) {
-      setSuggestError(err instanceof Error ? err.message : "Failed to apply suggestions to document");
+      const msg = err instanceof Error ? err.message : String(err);
+      setSuggestError(msg);
     } finally {
       setSuggestApplying(false);
     }
