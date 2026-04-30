@@ -57,7 +57,7 @@ export default function WordAddinPage() {
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [suggestApplying, setSuggestApplying] = useState(false);
-  const [suggestApplied, setSuggestApplied] = useState(false);
+  const [appliedIndices, setAppliedIndices] = useState<Set<number>>(new Set());
 
   const askFollowUpEndRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<string | null>(null);
@@ -259,14 +259,14 @@ export default function WordAddinPage() {
     setSuggestions(null);
     setSuggestError(null);
     setSuggestLoading(false);
-    setSuggestApplied(false);
+    setAppliedIndices(new Set());
   }
 
   function clearSuggestMode() {
     setSuggestions(null);
     setSuggestError(null);
     setSuggestLoading(false);
-    setSuggestApplied(false);
+    setAppliedIndices(new Set());
   }
 
   async function getDocumentText(selectionOnly: boolean): Promise<string> {
@@ -298,7 +298,7 @@ export default function WordAddinPage() {
     // Reset suggest state
     setSuggestions(null);
     setSuggestError(null);
-    setSuggestApplied(false);
+    setAppliedIndices(new Set());
     setSuggestLoading(true);
 
     let paragraphs: string[];
@@ -345,6 +345,62 @@ export default function WordAddinPage() {
     }
   }
 
+  async function navigateToSuggestion(paragraphIndex: number) {
+    if (!officeReady) return;
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const paragraphs = context.document.body.paragraphs;
+        paragraphs.load("text");
+        await context.sync();
+        if (paragraphIndex < paragraphs.items.length) {
+          paragraphs.items[paragraphIndex].select();
+          await context.sync();
+        }
+      });
+    } catch { /* ignore navigation errors */ }
+  }
+
+  async function applyOneSuggestion(
+    context: any,
+    paragraphs: any,
+    s: Suggestion,
+    withComments: boolean,
+  ) {
+    if (s.paragraphIndex >= paragraphs.items.length) return;
+    try { context.document.changeTrackingMode = "TrackAll"; await context.sync(); } catch { /* unsupported */ }
+    paragraphs.items[s.paragraphIndex].insertText(s.replacement, "Replace");
+    await context.sync();
+    try { context.document.changeTrackingMode = "Off"; await context.sync(); } catch { /* ignore */ }
+    if (withComments) {
+      const paragraphs2 = context.document.body.paragraphs;
+      paragraphs2.load("text");
+      await context.sync();
+      if (s.paragraphIndex < paragraphs2.items.length) {
+        try { paragraphs2.items[s.paragraphIndex].getRange().insertComment(s.reason); } catch { /* unsupported */ }
+        await context.sync();
+      }
+    }
+  }
+
+  async function handleApplySingleSuggestion(index: number, withComments: boolean) {
+    if (!officeReady || !suggestions) return;
+    setSuggestApplying(true);
+    setSuggestError(null);
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const paragraphs = context.document.body.paragraphs;
+        paragraphs.load("text");
+        await context.sync();
+        await applyOneSuggestion(context, paragraphs, suggestions[index], withComments);
+      });
+      setAppliedIndices(prev => new Set([...prev, index]));
+    } catch (err) {
+      setSuggestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSuggestApplying(false);
+    }
+  }
+
   async function handleApplySuggestions(withComments: boolean) {
     if (!officeReady || !suggestions || suggestions.length === 0) return;
     setSuggestApplying(true);
@@ -356,46 +412,34 @@ export default function WordAddinPage() {
         paragraphs.load("text");
         await context.sync();
 
-        // Phase 1: enable track changes using string literal (enum ref unreliable at runtime)
-        try {
-          context.document.changeTrackingMode = "TrackAll";
-          await context.sync();
-        } catch { /* not supported in this version — changes will still apply without tracking */ }
+        try { context.document.changeTrackingMode = "TrackAll"; await context.sync(); } catch { /* unsupported */ }
 
-        // Apply replacements in reverse order to preserve paragraph indices
-        const sorted = [...suggestions].sort((a, b) => b.paragraphIndex - a.paragraphIndex);
+        // Apply unapplied replacements in reverse order to preserve indices
+        const unapplied = suggestions.filter((_, i) => !appliedIndices.has(i));
+        const sorted = [...unapplied].sort((a, b) => b.paragraphIndex - a.paragraphIndex);
         for (const s of sorted) {
           if (s.paragraphIndex < paragraphs.items.length) {
             paragraphs.items[s.paragraphIndex].insertText(s.replacement, "Replace");
           }
         }
         await context.sync();
+        try { context.document.changeTrackingMode = "Off"; await context.sync(); } catch { /* ignore */ }
 
-        // Disable track changes
-        try {
-          context.document.changeTrackingMode = "Off";
-          await context.sync();
-        } catch { /* ignore */ }
-
-        // Phase 2: attach comments after changes are committed
         if (withComments) {
           const paragraphs2 = body.paragraphs;
           paragraphs2.load("text");
           await context.sync();
-          for (const s of suggestions) {
+          for (const s of unapplied) {
             if (s.paragraphIndex < paragraphs2.items.length) {
-              try {
-                paragraphs2.items[s.paragraphIndex].getRange().insertComment(s.reason);
-              } catch { /* skip paragraphs that don't support comments */ }
+              try { paragraphs2.items[s.paragraphIndex].getRange().insertComment(s.reason); } catch { /* skip */ }
             }
           }
           await context.sync();
         }
       });
-      setSuggestApplied(true);
+      setAppliedIndices(new Set(suggestions.map((_, i) => i)));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setSuggestError(msg);
+      setSuggestError(err instanceof Error ? err.message : String(err));
     } finally {
       setSuggestApplying(false);
     }
@@ -743,7 +787,7 @@ export default function WordAddinPage() {
                     {suggestActive ? (
                       <>
                         <p className="flex-1 text-xs text-gray-500 font-medium">Suggest Changes</p>
-                        {!suggestApplied && suggestions && suggestions.length > 0 && (
+                        {suggestions && suggestions.length > 0 && appliedIndices.size < suggestions.length && (
                           <>
                             <button
                               onClick={() => handleApplySuggestions(false)}
@@ -869,14 +913,14 @@ export default function WordAddinPage() {
                         <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5 mb-2">{suggestError}</div>
                       )}
 
-                      {suggestApplied && (
+                      {suggestions !== null && !suggestLoading && appliedIndices.size > 0 && appliedIndices.size === suggestions.length && (
                         <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1.5 text-center mb-2">
-                          Applied {suggestions?.length} tracked change{suggestions?.length !== 1 ? "s" : ""} to the document.
+                          All {suggestions.length} change{suggestions.length !== 1 ? "s" : ""} applied to the document.
                         </div>
                       )}
 
                       {suggestApplying && (
-                        <div className="text-xs text-indigo-600 text-center py-2">Applying changes...</div>
+                        <div className="text-xs text-indigo-600 text-center py-2">Applying...</div>
                       )}
 
                       {suggestions !== null && !suggestLoading && (
@@ -884,12 +928,43 @@ export default function WordAddinPage() {
                           <p className="text-xs text-gray-500 text-center mt-4">No changes needed — the document looks good.</p>
                         ) : (
                           <div className="space-y-2 mt-1">
-                            {suggestions.map((s, i) => (
-                              <div key={i} className="bg-white border border-gray-200 rounded p-2">
-                                <p className="text-xs text-indigo-700 font-medium mb-1">{s.reason}</p>
-                                <p className="text-xs text-gray-600 leading-relaxed line-clamp-4">{s.replacement}</p>
-                              </div>
-                            ))}
+                            {suggestions.map((s, i) => {
+                              const applied = appliedIndices.has(i);
+                              return (
+                                <div key={i} className={`bg-white border rounded p-2 ${applied ? "border-green-200 opacity-60" : "border-gray-200"}`}>
+                                  <p className="text-xs text-indigo-700 font-medium mb-1">{s.reason}</p>
+                                  <button
+                                    onClick={() => navigateToSuggestion(s.paragraphIndex)}
+                                    className="text-xs text-gray-600 leading-relaxed line-clamp-4 text-left w-full hover:text-indigo-600 hover:underline cursor-pointer"
+                                    title="Click to navigate to this location in the document"
+                                  >
+                                    {s.replacement}
+                                  </button>
+                                  <div className="mt-1.5 flex items-center gap-1.5">
+                                    {applied ? (
+                                      <span className="text-xs text-green-600 font-medium">✓ Applied</span>
+                                    ) : (
+                                      <>
+                                        <button
+                                          onClick={() => handleApplySingleSuggestion(i, false)}
+                                          disabled={!officeReady || suggestApplying}
+                                          className="text-xs border border-blue-400 text-blue-600 px-2.5 py-0.5 rounded hover:bg-blue-50 disabled:opacity-50"
+                                        >
+                                          Apply
+                                        </button>
+                                        <button
+                                          onClick={() => handleApplySingleSuggestion(i, true)}
+                                          disabled={!officeReady || suggestApplying}
+                                          className="text-xs border border-gray-300 text-gray-500 px-2.5 py-0.5 rounded hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                          Apply + Comment
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )
                       )}
