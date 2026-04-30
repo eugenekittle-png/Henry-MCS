@@ -192,24 +192,42 @@ export default function HelpPage() {
         {/* ── Assist ─────────────────────────────────────────────── */}
         {canSee("assist") && <Section id="assist" title="Assist" color="bg-indigo-500">
           <p className="text-sm text-gray-600 mb-4">
-            Conversational AI for document Q&amp;A and general legal research. Documents are optional - use Assist to ask questions with or without uploading files.
+            Conversational AI for document Q&amp;A and legal research. Upload your own files, pull in public filings from SEC EDGAR or case law from CourtListener, or ask questions without any documents at all.
           </p>
 
           <Image src={assistImg} alt="Assist screenshot" className="my-4 rounded-xl border border-gray-200 shadow-sm w-full h-auto" placeholder="blur" />
 
           <div className="space-y-2 mb-5">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Steps</p>
-            <Step number={1} text="Select a client and matter (used for billing tracking)." />
-            <Step number={2} text="Optionally upload one or more documents - PDF, DOCX, XLSX, TXT, CSV and more are supported." />
-            <Step number={3} text="Type your question or request and press Send." />
-            <Step number={4} text="Follow up with additional questions in the same session - the assistant retains context throughout." />
-            <Step number={5} text="When done, download the conversation as a PDF or Word document." />
+            <Step number={1} text="Select a client and matter (used for billing and audit tracking)." />
+            <Step number={2} text="Optionally upload one or more documents — PDF, DOCX, XLSX, TXT, CSV and more are supported." />
+            <Step number={3} text="Optionally add Research Sources — use Add from SEC EDGAR to pull in a public filing, or Add from CourtListener to search and include a court opinion." />
+            <Step number={4} text="Type your question or request and press Send. Documents and research sources are sent automatically on the first message." />
+            <Step number={5} text="Follow up with additional questions — the assistant retains full context throughout the conversation." />
+            <Step number={6} text="When done, download the conversation as a PDF." />
+          </div>
+
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Research Sources</p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                <p className="text-sm font-semibold text-indigo-800 mb-1">SEC EDGAR</p>
+                <p className="text-xs text-indigo-700 leading-relaxed">Search for a public company by name or ticker, select a filing type (10-K, 10-Q, 8-K, etc.), and add a specific filing. No account required.</p>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                <p className="text-sm font-semibold text-indigo-800 mb-1">CourtListener</p>
+                <p className="text-xs text-indigo-700 leading-relaxed">Search US case law by case name, citation (e.g. 384 U.S. 436), or legal topic. Filter by court and use &ldquo;Precedential only&rdquo; to narrow results. Powered by the Free Law Project.</p>
+              </div>
+            </div>
           </div>
 
           <ul className="space-y-2">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tips</p>
-            <Tip text="You can upload multiple documents and ask questions across all of them at once." />
-            <Tip text="Use New Conversation to clear the session and start fresh - context does not carry between conversations." />
+            <Tip text="Documents and research sources are locked once the conversation starts — add everything before sending your first message." />
+            <Tip text="You can combine uploaded files and research sources in the same session (e.g. a contract and a relevant court opinion)." />
+            <Tip text="For CourtListener, check 'Precedential only' to filter to binding case law and reduce noise. Use 'Match case name only' when you know the exact case name." />
+            <Tip text="If full opinion text is unavailable for a case, the assistant will note it and draw on its own knowledge of the case instead." />
+            <Tip text="New Conversation keeps your client and matter selected — documents and research sources are cleared and can be changed." />
             <Tip text="The more specific your question, the more precise the response." />
           </ul>
         </Section>}
