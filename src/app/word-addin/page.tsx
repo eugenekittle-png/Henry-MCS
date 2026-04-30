@@ -10,6 +10,7 @@ import { parseContentAndCitations } from "@/lib/citations";
 
 interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
+interface Suggestion { paragraphIndex: number; replacement: string; reason: string }
 
 
 export default function WordAddinPage() {
@@ -50,6 +51,13 @@ export default function WordAddinPage() {
   const [askFollowUpMessages, setAskFollowUpMessages] = useState<ChatMessage[]>([]);
   const [askFollowUpInput, setAskFollowUpInput] = useState("");
   const [askFollowUpStreaming, setAskFollowUpStreaming] = useState(false);
+
+  // Suggest changes state
+  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [suggestApplying, setSuggestApplying] = useState(false);
+  const [suggestApplied, setSuggestApplied] = useState(false);
 
   const askFollowUpEndRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<string | null>(null);
@@ -248,6 +256,17 @@ export default function WordAddinPage() {
     setSelectedMatter(null);
     setClientSearch("");
     setMatterSearch("");
+    setSuggestions(null);
+    setSuggestError(null);
+    setSuggestLoading(false);
+    setSuggestApplied(false);
+  }
+
+  function clearSuggestMode() {
+    setSuggestions(null);
+    setSuggestError(null);
+    setSuggestLoading(false);
+    setSuggestApplied(false);
   }
 
   async function getDocumentText(selectionOnly: boolean): Promise<string> {
@@ -257,6 +276,117 @@ export default function WordAddinPage() {
       await context.sync();
       return range.text as string;
     });
+  }
+
+  async function getDocumentParagraphs(): Promise<string[]> {
+    return (window as any).Word.run(async (context: any) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("text");
+      await context.sync();
+      return paragraphs.items.map((p: any) => p.text as string);
+    });
+  }
+
+  async function handleSuggestChanges() {
+    if (!officeReady) return;
+    // Clear ask mode
+    setAskContent("");
+    setAskError(null);
+    setActiveQuickAction(null);
+    setAskFollowUpMessages([]);
+    setAskFollowUpInput("");
+    // Reset suggest state
+    setSuggestions(null);
+    setSuggestError(null);
+    setSuggestApplied(false);
+    setSuggestLoading(true);
+
+    let paragraphs: string[];
+    try {
+      paragraphs = await getDocumentParagraphs();
+    } catch {
+      setSuggestError("Could not read the document. Make sure a Word document is open.");
+      setSuggestLoading(false);
+      return;
+    }
+
+    const nonEmpty = paragraphs.filter(p => p.trim().length > 0);
+    if (nonEmpty.length === 0) {
+      setSuggestError("The document appears to be empty.");
+      setSuggestLoading(false);
+      return;
+    }
+
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      const res = await fetch("/api/addin/suggest", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          paragraphs,
+          client: clientLabel,
+          matter: matterLabel,
+          clientNumber: selectedClient?.client_number ?? null,
+          matterNumber: selectedMatter?.matter_number ?? null,
+        }),
+      });
+      if (!res.ok) {
+        let errMsg = `Request failed (${res.status})`;
+        try { const d = await res.json(); if (d.error) errMsg = d.error; } catch { /* non-JSON */ }
+        throw new Error(errMsg);
+      }
+      const data = await res.json();
+      setSuggestions(data.suggestions ?? []);
+    } catch (err) {
+      setSuggestError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSuggestLoading(false);
+    }
+  }
+
+  async function handleApplySuggestions(withComments: boolean) {
+    if (!officeReady || !suggestions || suggestions.length === 0) return;
+    setSuggestApplying(true);
+    setSuggestError(null);
+    try {
+      await (window as any).Word.run(async (context: any) => {
+        const body = context.document.body;
+        const paragraphs = body.paragraphs;
+        paragraphs.load("text");
+        await context.sync();
+
+        // Phase 1: apply text replacements as tracked changes (reverse order preserves indices)
+        context.document.changeTrackingMode = (window as any).Word.ChangeTrackingMode.trackAll;
+        const sorted = [...suggestions].sort((a, b) => b.paragraphIndex - a.paragraphIndex);
+        for (const s of sorted) {
+          if (s.paragraphIndex < paragraphs.items.length) {
+            paragraphs.items[s.paragraphIndex].insertText(s.replacement, "Replace");
+          }
+        }
+        await context.sync();
+        context.document.changeTrackingMode = (window as any).Word.ChangeTrackingMode.off;
+        await context.sync();
+
+        // Phase 2: attach comments (if requested) after changes are committed
+        if (withComments) {
+          const paragraphs2 = body.paragraphs;
+          paragraphs2.load("text");
+          await context.sync();
+          for (const s of suggestions) {
+            if (s.paragraphIndex < paragraphs2.items.length) {
+              paragraphs2.items[s.paragraphIndex].getRange().insertComment(s.reason);
+            }
+          }
+          await context.sync();
+        }
+      });
+      setSuggestApplied(true);
+    } catch (err) {
+      setSuggestError(err instanceof Error ? err.message : "Failed to apply suggestions to document");
+    } finally {
+      setSuggestApplying(false);
+    }
   }
 
   async function insertIntoDocument(text: string) {
@@ -459,6 +589,7 @@ export default function WordAddinPage() {
 
   const { main: askMain, citations: askCitations } = parseContentAndCitations(askContent);
   const askHasCitations = askCitations.length > 0;
+  const suggestActive = suggestLoading || suggestError !== null || suggestions !== null;
 
   return (
     <>
@@ -592,24 +723,56 @@ export default function WordAddinPage() {
               </div>
             </div>
 
-            {/* ── Ask view ── */}
+            {/* ── Ask / Suggest view ── */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Prompt input — collapsed when a response is showing */}
-                {(askContent || askStreaming) ? (
+                {/* Header — collapsed when a response or suggest result is showing */}
+                {(askContent || askStreaming || suggestActive) ? (
                   <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-                    <p className="flex-1 text-xs text-gray-500 truncate">{askPrompt || "—"}</p>
-                    <button
-                      onClick={() => {
-                        setAskContent("");
-                        setAskError(null);
-                        setActiveQuickAction(null);
-                        setAskFollowUpMessages([]);
-                        setAskFollowUpInput("");
-                      }}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
-                    >
-                      New
-                    </button>
+                    {suggestActive ? (
+                      <>
+                        <p className="flex-1 text-xs text-gray-500 font-medium">Suggest Changes</p>
+                        {!suggestApplied && suggestions && suggestions.length > 0 && (
+                          <>
+                            <button
+                              onClick={() => handleApplySuggestions(false)}
+                              disabled={!officeReady || suggestApplying}
+                              className="text-xs bg-blue-600 text-white px-2 py-1 rounded font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+                            >
+                              Add All
+                            </button>
+                            <button
+                              onClick={() => handleApplySuggestions(true)}
+                              disabled={!officeReady || suggestApplying}
+                              className="text-xs bg-green-600 text-white px-2 py-1 rounded font-medium hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
+                            >
+                              Add All with Comments
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={clearSuggestMode}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                        >
+                          New
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="flex-1 text-xs text-gray-500 truncate">{askPrompt || "—"}</p>
+                        <button
+                          onClick={() => {
+                            setAskContent("");
+                            setAskError(null);
+                            setActiveQuickAction(null);
+                            setAskFollowUpMessages([]);
+                            setAskFollowUpInput("");
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap"
+                        >
+                          New
+                        </button>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className="p-3 space-y-2 flex-shrink-0 border-b border-gray-100">
@@ -655,6 +818,17 @@ export default function WordAddinPage() {
                         Ask about Selection
                       </button>
                     </div>
+                    {/* Suggest Changes */}
+                    <div className="border-t border-gray-100 pt-2">
+                      <button
+                        onClick={handleSuggestChanges}
+                        disabled={!officeReady || matterRequired}
+                        className="w-full bg-indigo-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Suggest Changes
+                      </button>
+                      <p className="text-xs text-gray-400 text-center mt-1">Applies AI suggestions as tracked changes in Word</p>
+                    </div>
                     {matterRequired && (
                       <p className="text-xs text-amber-600 text-center">Select a client and matter above to continue.</p>
                     )}
@@ -666,7 +840,52 @@ export default function WordAddinPage() {
 
                 {/* Result area */}
                 <div className="flex-1 overflow-y-auto">
-                  {askStreaming && (
+
+                  {/* ── Suggest Changes result ── */}
+                  {suggestActive && (
+                    <div className="px-3 pb-3 pt-2">
+                      {suggestLoading && (
+                        <div className="flex items-center gap-2 text-gray-400 text-xs py-2">
+                          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+                          <span>Analyzing document...</span>
+                        </div>
+                      )}
+
+                      {suggestError && (
+                        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5 mb-2">{suggestError}</div>
+                      )}
+
+                      {suggestApplied && (
+                        <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1.5 text-center mb-2">
+                          Applied {suggestions?.length} tracked change{suggestions?.length !== 1 ? "s" : ""} to the document.
+                        </div>
+                      )}
+
+                      {suggestApplying && (
+                        <div className="text-xs text-indigo-600 text-center py-2">Applying changes...</div>
+                      )}
+
+                      {suggestions !== null && !suggestLoading && (
+                        suggestions.length === 0 ? (
+                          <p className="text-xs text-gray-500 text-center mt-4">No changes needed — the document looks good.</p>
+                        ) : (
+                          <div className="space-y-2 mt-1">
+                            {suggestions.map((s, i) => (
+                              <div key={i} className="bg-white border border-gray-200 rounded p-2">
+                                <p className="text-xs text-indigo-700 font-medium mb-1">{s.reason}</p>
+                                <p className="text-xs text-gray-600 leading-relaxed line-clamp-4">{s.replacement}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Ask result ── */}
+                  {!suggestActive && askStreaming && (
                     <div className="px-3 py-2 flex items-center gap-2 text-gray-400 text-xs">
                       <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
                       <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
@@ -675,11 +894,11 @@ export default function WordAddinPage() {
                     </div>
                   )}
 
-                  {askError && (
+                  {!suggestActive && askError && (
                     <div className="mx-3 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">{askError}</div>
                   )}
 
-                  {askContent && (
+                  {!suggestActive && askContent && (
                     <div className="px-3 pb-3 pt-2">
                       <div className="prose prose-xs max-w-none text-xs prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700 prose-p:my-1">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{askHasCitations ? askMain : askContent}</ReactMarkdown>
@@ -766,7 +985,7 @@ export default function WordAddinPage() {
                     </div>
                   )}
 
-                  {!askContent && !askStreaming && !askError && (
+                  {!suggestActive && !askContent && !askStreaming && !askError && (
                     <p className="text-xs text-gray-400 text-center mt-6 px-4">Type a request above and click a button to get recommendations.</p>
                   )}
                 </div>
