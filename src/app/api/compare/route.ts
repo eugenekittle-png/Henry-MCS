@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     for (const file of [file1, file2]) {
       const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
       if (!COMPARE_EXTENSIONS.includes(ext)) {
-        return Response.json({ error: `Unsupported file type: ${file.name}. Only PDF, DOC, and DOCX are supported.` }, { status: 400 });
+        return Response.json({ error: `Unsupported file type: ${file.name}. Supported types: PDF, DOC, DOCX, XLSX, PPTX, TXT, MD, CSV.` }, { status: 400 });
       }
       if (file.size > MAX_FILE_SIZE) {
         return Response.json({ error: `File too large: ${file.name} (max 10MB)` }, { status: 400 });

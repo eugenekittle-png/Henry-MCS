@@ -17,7 +17,7 @@ export const SUPPORTED_EXTENSIONS = [
   ".pdf", ".doc", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv", ".zip",
 ];
 
-export const COMPARE_EXTENSIONS = [".pdf", ".doc", ".docx"];
+export const COMPARE_EXTENSIONS = [".pdf", ".doc", ".docx", ".xlsx", ".pptx", ".txt", ".md", ".csv"];
 
 export const SUMMARY_SYSTEM_PROMPT = `You are an expert document analyst working within a legal/professional services context. The user has uploaded one or more documents and needs a comprehensive summary.
 

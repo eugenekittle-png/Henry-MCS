@@ -8,8 +8,15 @@ import FileDropZone from "@/components/FileDropZone";
 import FileList from "@/components/FileList";
 import ClientMatterSelect from "@/components/ClientMatterSelect";
 import DiffDisplay from "@/components/DiffDisplay";
+import ExcelDiffDisplay from "@/components/ExcelDiffDisplay";
 import type { DiffLine } from "@/components/DiffDisplay";
+import type { ExcelDiffResult } from "@/components/ExcelDiffDisplay";
 import type { Client, Matter } from "@/types";
+
+function isTabular(file: File | null) {
+  const name = file?.name.toLowerCase() ?? "";
+  return name.endsWith(".xlsx") || name.endsWith(".csv");
+}
 
 export default function ComparePage() {
   const { user } = useAuth();
@@ -30,6 +37,7 @@ export default function ComparePage() {
   const [file2, setFile2] = useState<File | null>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [excelDiff, setExcelDiff] = useState<ExcelDiffResult | null>(null);
 
   const handleFile1 = useCallback((files: File[]) => {
     setFile1(files[0] || null);
@@ -49,8 +57,8 @@ export default function ComparePage() {
     setSelectedMatter(null);
   }, []);
 
+  const hasResults = diffLines.length > 0 || excelDiff !== null || isComparing;
   const canSubmit = file1 && file2 && selectedClient && selectedMatter && !isComparing;
-  const hasResults = diffLines.length > 0 || isComparing;
 
   const handleReset = useCallback(() => {
     setFile1(null);
@@ -58,6 +66,7 @@ export default function ComparePage() {
     setDiffLines([]);
     setDiffFile1Name("");
     setDiffFile2Name("");
+    setExcelDiff(null);
     setError(null);
     setSelectedClient(null);
     setSelectedMatter(null);
@@ -67,6 +76,7 @@ export default function ComparePage() {
     if (!file1 || !file2 || !selectedClient || !selectedMatter) return;
 
     setDiffLines([]);
+    setExcelDiff(null);
     setError(null);
     setIsComparing(true);
 
@@ -76,11 +86,11 @@ export default function ComparePage() {
     formData.append("clientId", String(selectedClient.id));
     formData.append("matterId", String(selectedMatter.id));
 
+    const bothExcel = isTabular(file1) && isTabular(file2);
+    const endpoint = bothExcel ? "/api/compare-diff-excel" : "/api/compare-diff";
+
     try {
-      const diffRes = await fetch("/api/compare-diff", {
-        method: "POST",
-        body: formData,
-      });
+      const diffRes = await fetch(endpoint, { method: "POST", body: formData });
 
       if (!diffRes.ok) {
         const text = await diffRes.text();
@@ -90,9 +100,14 @@ export default function ComparePage() {
       }
 
       const diffData = await diffRes.json();
-      setDiffLines(diffData.lines);
-      setDiffFile1Name(diffData.file1Name);
-      setDiffFile2Name(diffData.file2Name);
+
+      if (bothExcel) {
+        setExcelDiff(diffData as ExcelDiffResult);
+      } else {
+        setDiffLines(diffData.lines);
+        setDiffFile1Name(diffData.file1Name);
+        setDiffFile2Name(diffData.file2Name);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -125,6 +140,31 @@ export default function ComparePage() {
   }, [diffLines, diffFile1Name, diffFile2Name, selectedClient, selectedMatter]);
 
   const showDownload = diffLines.length > 0 && !isComparing;
+  const [excelExporting, setExcelExporting] = useState(false);
+
+  const handleExcelExport = useCallback(async () => {
+    if (!excelDiff) return;
+    setExcelExporting(true);
+    try {
+      const res = await fetch("/api/export-compare-excel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(excelDiff),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const f1 = excelDiff.file1Name.replace(/\.[^.]+$/, "");
+      const f2 = excelDiff.file2Name.replace(/\.[^.]+$/, "");
+      a.download = `diff-${f1}-vs-${f2}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExcelExporting(false);
+    }
+  }, [excelDiff]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -148,7 +188,7 @@ export default function ComparePage() {
         )}
       </div>
       <p className="text-gray-600 mb-6">
-        Upload two documents to get a line-by-line comparison.
+        Upload two documents to get a line-by-line comparison. Supports PDF, Word, Excel, PowerPoint, and text files.
       </p>
 
       <div className="space-y-4">
@@ -170,7 +210,7 @@ export default function ComparePage() {
             <p className="text-sm font-medium text-gray-700 mb-2">Document 1</p>
             <FileDropZone
               onFiles={handleFile1}
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,.doc,.docx,.xlsx,.pptx,.txt,.md,.csv"
               multiple={false}
               label="Drop first file here"
             />
@@ -182,7 +222,7 @@ export default function ComparePage() {
             <p className="text-sm font-medium text-gray-700 mb-2">Document 2</p>
             <FileDropZone
               onFiles={handleFile2}
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,.doc,.docx,.xlsx,.pptx,.txt,.md,.csv"
               multiple={false}
               label="Drop second file here"
             />
@@ -221,6 +261,22 @@ export default function ComparePage() {
             <p className="text-red-700 font-medium">Error</p>
             <p className="text-red-600 text-sm mt-1">{error}</p>
           </div>
+        )}
+
+        {excelDiff && (
+          <>
+            <ExcelDiffDisplay result={excelDiff} />
+            <button
+              onClick={handleExcelExport}
+              disabled={excelExporting}
+              className="w-full bg-gray-800 text-white py-2.5 px-4 rounded-lg text-sm font-medium hover:bg-gray-900 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              {excelExporting ? "Exporting..." : "Export to Excel"}
+            </button>
+          </>
         )}
 
         {diffLines.length > 0 && (

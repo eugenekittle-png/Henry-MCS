@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
       if (!COMPARE_EXTENSIONS.includes(ext)) {
         return Response.json(
-          { error: `Unsupported file type: ${file.name}. Only PDF, DOC, and DOCX are supported.` },
+          { error: `Unsupported file type: ${file.name}. Supported types: PDF, DOC, DOCX, XLSX, PPTX, TXT, MD, CSV.` },
           { status: 400 }
         );
       }
