@@ -260,7 +260,7 @@ export default function HelpPage() {
         {/* ── Compare ────────────────────────────────────────────── */}
         {canSee("compare") && <Section id="compare" title="Compare" color="bg-purple-500">
           <p className="text-sm text-gray-600 mb-4">
-            Upload two documents and receive a detailed AI-generated comparison highlighting similarities, differences, and key changes between them.
+            Upload two documents and receive a detailed comparison. For Word and PDF files you get an AI-generated analysis with a line-by-line diff. For Excel and CSV files you get a cell-by-cell grid view with color-coded changes you can export back to Excel.
           </p>
 
           <Image src={compareImg} alt="Compare screenshot" className="my-4 rounded-xl border border-gray-200 shadow-sm w-full h-auto" placeholder="blur" />
@@ -270,15 +270,50 @@ export default function HelpPage() {
             <Step number={1} text="Select a client and matter." />
             <Step number={2} text="Upload Document 1 and Document 2." />
             <Step number={3} text="Click Compare and wait for the analysis to complete." />
-            <Step number={4} text="Review the report - changes are grouped by type (additions, removals, modifications)." />
-            <Step number={5} text="Download the comparison as a PDF." />
+            <Step number={4} text="Review the results — Word/PDF shows an AI report with a line-by-line diff; Excel/CSV shows a color-coded grid." />
+            <Step number={5} text="Download the results — Word/PDF comparisons export as PDF; Excel/CSV comparisons export as a styled Excel file." />
+          </div>
+
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">File Types</p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                <p className="text-sm font-semibold text-purple-800 mb-1">Documents — AI Analysis</p>
+                <p className="text-xs text-purple-700 leading-relaxed mb-2">Receives a structured AI report covering similarities, differences, additions, and removals. Also includes a line-by-line diff view.</p>
+                <p className="text-xs text-purple-600 font-medium">PDF, DOC, DOCX, PPTX, TXT, MD</p>
+              </div>
+              <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                <p className="text-sm font-semibold text-purple-800 mb-1">Spreadsheets — Grid View</p>
+                <p className="text-xs text-purple-700 leading-relaxed mb-2">Shows a cell-by-cell grid with color-coded rows. Green = added, red = removed, yellow = changed (showing old and new values). Export to Excel preserves all highlighting.</p>
+                <p className="text-xs text-purple-600 font-medium">XLSX, CSV</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Excel / CSV Grid View</p>
+            <div className="space-y-1.5 pl-1">
+              {[
+                "Toggle Show only changes to hide unchanged rows and focus on what differs.",
+                "If the file has multiple sheets, tabs appear at the top — dots indicate which sheets have changes.",
+                "Changed cells show the old value (strikethrough) above the new value.",
+                "The stats bar at the top of the grid shows a count of changed, added, and removed rows.",
+                "Click Export to Excel to download a styled workbook — includes a Summary sheet with per-sheet counts.",
+              ].map((item, i) => (
+                <div key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                  <span className="text-gray-400 mt-0.5">•</span>
+                  {item}
+                </div>
+              ))}
+            </div>
           </div>
 
           <ul className="space-y-2">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tips</p>
-            <Tip text="Best used for comparing versions of the same document - contracts, briefs, agreements." />
-            <Tip text="Supports PDF, DOC, and DOCX formats." />
-            <Tip text="The order of documents matters - Document 1 is treated as the original, Document 2 as the revised version." />
+            <Tip text="The order of documents matters — Document 1 is the original, Document 2 is the revised version." />
+            <Tip text="For Excel/CSV, the grid compares rows by position. If rows are inserted in the middle, everything below will appear as changed." />
+            <Tip text="You can compare an XLSX against a CSV — both are parsed to the same grid format." />
+            <Tip text="Best used for comparing versions of the same document — contracts, briefs, data exports." />
           </ul>
         </Section>}
 
