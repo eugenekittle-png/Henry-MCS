@@ -28,7 +28,9 @@ Guidelines:
 - If no meaningful changes are needed, return {"suggestions": []}`;
 
 export async function POST(req: NextRequest) {
+  console.log("[suggest] POST called");
   const session = await getSessionFromRequest(req);
+  console.log("[suggest] session:", session?.email ?? "null");
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ip = getClientIp(req);
@@ -87,6 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     const suggestions = Array.isArray(result?.suggestions) ? result.suggestions : [];
+    console.log("[suggest] calling logAction, suggestions:", suggestions.length);
 
     await logAction({
       username: session.email,
