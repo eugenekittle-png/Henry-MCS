@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { text, prompt, client, matter, clientNumber, matterNumber } = await req.json();
+    const { text, prompt, client, matter, clientNumber, matterNumber, actionLabel } = await req.json();
+    const logActionName = actionLabel ? `${actionLabel} (Word)` : "Ask (Word)";
 
     if (!text?.trim()) {
       return Response.json({ error: "Document text is required" }, { status: 400 });
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
 
         await logAction({
           username: session.email,
-          action: "Ask (Word)",
+          action: logActionName,
           clientNumber: clientNumber || null,
           matterNumber: matterNumber || null,
           details: { source: "word-addin", prompt: prompt.slice(0, 200), client: client || undefined, matter: matter || undefined },

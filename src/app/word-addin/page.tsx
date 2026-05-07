@@ -453,7 +453,7 @@ export default function WordAddinPage() {
     });
   }
 
-  const handleAsk = useCallback(async (selectionOnly: boolean, promptOverride?: string) => {
+  const handleAsk = useCallback(async (selectionOnly: boolean, promptOverride?: string, actionLabel?: string) => {
     const effectivePrompt = promptOverride ?? askPrompt;
     if (!officeReady || !effectivePrompt.trim()) return;
     setAskWasSelection(selectionOnly);
@@ -489,6 +489,7 @@ export default function WordAddinPage() {
           matter: matterLabel,
           clientNumber: selectedClient?.client_number ?? null,
           matterNumber: selectedMatter?.matter_number ?? null,
+          actionLabel: actionLabel ?? "Ask",
         }),
       });
 
@@ -539,7 +540,7 @@ export default function WordAddinPage() {
       ? `${prompt}\n\n${selectedText.trim()}`
       : prompt;
     setAskPrompt(combined);
-    handleAsk(true, combined);
+    handleAsk(true, combined, label);
   }, [officeReady, handleAsk]);
 
   function extractCleanVersion(text: string): string {
