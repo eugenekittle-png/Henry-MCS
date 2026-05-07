@@ -22,7 +22,7 @@ export async function logAction(params: {
 }) {
   try {
     await insertAuditLog(params);
-  } catch {
-    // Never let audit logging break the main flow
+  } catch (err) {
+    console.error("[audit] insertAuditLog failed:", err);
   }
 }
