@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     const suggestions = Array.isArray(result?.suggestions) ? result.suggestions : [];
 
-    logAction({
+    await logAction({
       username: session.email,
       action: "Suggest Changes (Word)",
       clientNumber: clientNumber || null,
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ suggestions });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Internal server error";
-    logAction({
+    await logAction({
       username: session.email,
       action: "Suggest Changes (Word)",
       details: { error: msg },

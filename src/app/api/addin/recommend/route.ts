@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
           controller.close();
         }
 
-        logAction({
+        await logAction({
           username: session.email,
           action: "Ask (Word)",
           clientNumber: clientNumber || null,

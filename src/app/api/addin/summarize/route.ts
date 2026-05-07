@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: message })}\n\n`));
           controller.close();
         } finally {
-          logAction({
+          await logAction({
             username: session.email,
             action: "Summarize",
             details: { source: "word-addin", filename: filename || "Document", client: client || undefined, matter: matter || undefined },
