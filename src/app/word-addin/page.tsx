@@ -12,7 +12,7 @@ interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
 interface Suggestion { paragraphIndex: number; replacement: string; reason: string }
 interface MatrixTemplate { id: number; name: string; description: string; column_count: number }
-interface MatrixColumn { column_name: string; instruction: string | null }
+interface MatrixColumn { id: number; column_name: string; instruction: string | null }
 interface ExtractionResult { values: Record<string, string | null>; columns: string[] }
 
 
@@ -77,6 +77,22 @@ export default function WordAddinPage() {
   const [extractionResults, setExtractionResults] = useState<ExtractionResult | null>(null);
   const [extractionLoading, setExtractionLoading] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+
+  // Template create state
+  const [showNewTemplateForm, setShowNewTemplateForm] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState("");
+  const [newTemplateCreating, setNewTemplateCreating] = useState(false);
+
+  // Column editor state
+  const [editingColumnId, setEditingColumnId] = useState<number | null>(null);
+  const [editColName, setEditColName] = useState("");
+  const [editColInstruction, setEditColInstruction] = useState("");
+  const [showAddColumn, setShowAddColumn] = useState(false);
+  const [newColName, setNewColName] = useState("");
+  const [newColInstruction, setNewColInstruction] = useState("");
+  const [newColAdding, setNewColAdding] = useState(false);
+  const [suggestingColumns, setSuggestingColumns] = useState(false);
+  const [suggestColumnsError, setSuggestColumnsError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -330,6 +346,13 @@ export default function WordAddinPage() {
     setExtractionResults(null);
     setExtractionError(null);
     setExtractionLoading(false);
+    setShowNewTemplateForm(false);
+    setNewTemplateName("");
+    setEditingColumnId(null);
+    setShowAddColumn(false);
+    setNewColName("");
+    setNewColInstruction("");
+    setSuggestColumnsError(null);
   }
 
   async function handleRunExtraction() {
@@ -377,6 +400,129 @@ export default function WordAddinPage() {
       setExtractionError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setExtractionLoading(false);
+    }
+  }
+
+  async function handleCreateTemplate() {
+    if (!newTemplateName.trim() || !selectedClient || !selectedMatter) return;
+    setNewTemplateCreating(true);
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      const res = await fetch("/api/matrix/templates", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: newTemplateName.trim(),
+          description: "",
+          clientId: selectedClient.id,
+          matterId: selectedMatter.id,
+          clientNumber: selectedClient.client_number,
+          matterNumber: selectedMatter.matter_number,
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to create template"); }
+      const { id } = await res.json();
+      const created: MatrixTemplate = { id, name: newTemplateName.trim(), description: "", column_count: 0 };
+      setMatrixTemplates(prev => [...prev, created]);
+      setSelectedTemplateId(id);
+      setTemplateColumns([]);
+      setShowNewTemplateForm(false);
+      setNewTemplateName("");
+    } catch { /* silent — user can retry */ }
+    finally { setNewTemplateCreating(false); }
+  }
+
+  async function handleAddColumn() {
+    if (!newColName.trim() || !selectedTemplateId) return;
+    setNewColAdding(true);
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      const res = await fetch(`/api/matrix/templates/${selectedTemplateId}/columns`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ column_name: newColName.trim(), instruction: newColInstruction.trim() || null }),
+      });
+      if (!res.ok) throw new Error("Failed to add column");
+      const { column } = await res.json();
+      setTemplateColumns(prev => [...prev, column]);
+      setShowAddColumn(false);
+      setNewColName("");
+      setNewColInstruction("");
+    } catch { /* silent */ }
+    finally { setNewColAdding(false); }
+  }
+
+  async function handleUpdateColumn(colId: number) {
+    if (!editColName.trim() || !selectedTemplateId) return;
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      await fetch(`/api/matrix/templates/${selectedTemplateId}/columns/${colId}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ column_name: editColName.trim(), instruction: editColInstruction.trim() || null }),
+      });
+      setTemplateColumns(prev => prev.map(c =>
+        c.id === colId ? { ...c, column_name: editColName.trim(), instruction: editColInstruction.trim() || null } : c
+      ));
+      setEditingColumnId(null);
+    } catch { /* silent */ }
+  }
+
+  async function handleDeleteColumn(colId: number) {
+    if (!selectedTemplateId) return;
+    try {
+      const headers: HeadersInit = {};
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      await fetch(`/api/matrix/templates/${selectedTemplateId}/columns/${colId}`, { method: "DELETE", headers });
+      setTemplateColumns(prev => prev.filter(c => c.id !== colId));
+    } catch { /* silent */ }
+  }
+
+  async function handleSuggestColumns() {
+    if (!officeReady || !selectedTemplateId) return;
+    setSuggestingColumns(true);
+    setSuggestColumnsError(null);
+    let docText = "";
+    try {
+      docText = await getDocumentText(false);
+    } catch {
+      setSuggestColumnsError("Could not read the document.");
+      setSuggestingColumns(false);
+      return;
+    }
+    if (!docText.trim()) {
+      setSuggestColumnsError("The document appears to be empty.");
+      setSuggestingColumns(false);
+      return;
+    }
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      const res = await fetch("/api/addin/suggest-columns", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ documentText: docText }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to suggest columns"); }
+      const { columns: suggested } = await res.json();
+      const addHeaders: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) addHeaders["Authorization"] = `Bearer ${tokenRef.current}`;
+      const added: MatrixColumn[] = [];
+      for (const col of (suggested as { column_name: string; instruction: string | null }[])) {
+        const r = await fetch(`/api/matrix/templates/${selectedTemplateId}/columns`, {
+          method: "POST", headers: addHeaders,
+          body: JSON.stringify({ column_name: col.column_name, instruction: col.instruction }),
+        });
+        if (r.ok) { const { column } = await r.json(); added.push(column); }
+      }
+      setTemplateColumns(prev => [...prev, ...added]);
+    } catch (err) {
+      setSuggestColumnsError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setSuggestingColumns(false);
     }
   }
 
@@ -1227,56 +1373,179 @@ export default function WordAddinPage() {
                 ) : (
                   <div className="p-3 space-y-3">
 
-                    {/* Template dropdown */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Template</label>
-                      {matrixTemplatesLoading ? (
-                        <p className="text-xs text-gray-400">Loading templates...</p>
-                      ) : matrixTemplates.length === 0 ? (
-                        <p className="text-xs text-gray-400 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">No templates found for this matter. Create one in Matrix first.</p>
-                      ) : (
-                        <select
-                          value={selectedTemplateId}
-                          onChange={e => setSelectedTemplateId(e.target.value ? Number(e.target.value) : "")}
-                          className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    {/* Template selector + New button */}
+                    {!showNewTemplateForm && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex-1 min-w-0">
+                          {matrixTemplatesLoading ? (
+                            <p className="text-xs text-gray-400">Loading templates...</p>
+                          ) : (
+                            <select
+                              value={selectedTemplateId}
+                              onChange={e => {
+                                setSelectedTemplateId(e.target.value ? Number(e.target.value) : "");
+                                setExtractionResults(null);
+                                setEditingColumnId(null);
+                                setShowAddColumn(false);
+                                setSuggestColumnsError(null);
+                              }}
+                              className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            >
+                              <option value="">— Select a template —</option>
+                              {matrixTemplates.map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => { setShowNewTemplateForm(true); setNewTemplateName(""); setSelectedTemplateId(""); }}
+                          className="flex-shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium border border-blue-200 px-2 py-1.5 rounded whitespace-nowrap"
                         >
-                          <option value="">— Select a template —</option>
-                          {matrixTemplates.map(t => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-
-                    {/* Columns preview */}
-                    {selectedTemplateId !== "" && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Columns</label>
-                        {templateColumnsLoading ? (
-                          <p className="text-xs text-gray-400">Loading columns...</p>
-                        ) : templateColumns.length === 0 ? (
-                          <p className="text-xs text-gray-400">This template has no columns.</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {templateColumns.map((col, i) => (
-                              <span key={i} className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded border border-gray-200">
-                                {col.column_name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                          + New
+                        </button>
                       </div>
                     )}
 
-                    {/* Run button */}
-                    {selectedTemplateId !== "" && templateColumns.length > 0 && !extractionResults && (
-                      <button
-                        onClick={handleRunExtraction}
-                        disabled={!officeReady || extractionLoading}
-                        className="w-full bg-indigo-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {extractionLoading ? "Extracting..." : "Run on Document"}
-                      </button>
+                    {/* New template form */}
+                    {showNewTemplateForm && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-700">New Template</p>
+                        <input
+                          type="text"
+                          value={newTemplateName}
+                          onChange={e => setNewTemplateName(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") handleCreateTemplate(); if (e.key === "Escape") setShowNewTemplateForm(false); }}
+                          placeholder="Template name..."
+                          autoFocus
+                          className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => setShowNewTemplateForm(false)}
+                            className="flex-1 bg-white border border-gray-200 text-gray-600 py-1.5 rounded text-xs font-medium hover:bg-gray-50"
+                          >Cancel</button>
+                          <button
+                            onClick={handleCreateTemplate}
+                            disabled={!newTemplateName.trim() || newTemplateCreating}
+                            className="flex-1 bg-blue-600 text-white py-1.5 rounded text-xs font-semibold hover:bg-blue-700 disabled:opacity-50"
+                          >{newTemplateCreating ? "Creating..." : "Create"}</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Column editor */}
+                    {selectedTemplateId !== "" && !showNewTemplateForm && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-gray-700">Columns</p>
+                          <button
+                            onClick={handleSuggestColumns}
+                            disabled={suggestingColumns || !officeReady}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {suggestingColumns ? "Suggesting..." : "✨ Suggest from Doc"}
+                          </button>
+                        </div>
+
+                        {suggestColumnsError && (
+                          <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">{suggestColumnsError}</div>
+                        )}
+
+                        {templateColumnsLoading ? (
+                          <p className="text-xs text-gray-400">Loading columns...</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {templateColumns.map(col => (
+                              editingColumnId === col.id ? (
+                                <div key={col.id} className="border border-blue-200 rounded p-2 space-y-1.5 bg-blue-50">
+                                  <input
+                                    type="text"
+                                    value={editColName}
+                                    onChange={e => setEditColName(e.target.value)}
+                                    placeholder="Column name"
+                                    autoFocus
+                                    className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editColInstruction}
+                                    onChange={e => setEditColInstruction(e.target.value)}
+                                    placeholder="Extraction instruction (optional)"
+                                    className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  />
+                                  <div className="flex gap-1">
+                                    <button onClick={() => setEditingColumnId(null)} className="flex-1 bg-white border border-gray-200 text-gray-600 py-1 rounded text-xs hover:bg-gray-50">Cancel</button>
+                                    <button onClick={() => handleUpdateColumn(col.id)} disabled={!editColName.trim()} className="flex-1 bg-blue-600 text-white py-1 rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50">Save</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div key={col.id} className="flex items-start gap-1.5 bg-white border border-gray-100 rounded px-2 py-1.5">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-gray-800 truncate">{col.column_name}</p>
+                                    {col.instruction && <p className="text-xs text-gray-400 truncate">{col.instruction}</p>}
+                                  </div>
+                                  <div className="flex gap-1.5 flex-shrink-0 mt-0.5">
+                                    <button
+                                      onClick={() => { setEditingColumnId(col.id); setEditColName(col.column_name); setEditColInstruction(col.instruction ?? ""); }}
+                                      className="text-gray-400 hover:text-blue-600 text-xs leading-none"
+                                      title="Edit"
+                                    >✎</button>
+                                    <button
+                                      onClick={() => handleDeleteColumn(col.id)}
+                                      className="text-gray-400 hover:text-red-500 text-xs leading-none"
+                                      title="Delete"
+                                    >×</button>
+                                  </div>
+                                </div>
+                              )
+                            ))}
+
+                            {/* Add column inline form */}
+                            {showAddColumn ? (
+                              <div className="border border-gray-200 rounded p-2 space-y-1.5 bg-gray-50">
+                                <input
+                                  type="text"
+                                  value={newColName}
+                                  onChange={e => setNewColName(e.target.value)}
+                                  placeholder="Column name"
+                                  autoFocus
+                                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={newColInstruction}
+                                  onChange={e => setNewColInstruction(e.target.value)}
+                                  placeholder="Extraction instruction (optional)"
+                                  className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                                <div className="flex gap-1">
+                                  <button onClick={() => { setShowAddColumn(false); setNewColName(""); setNewColInstruction(""); }} className="flex-1 bg-white border border-gray-200 text-gray-600 py-1 rounded text-xs hover:bg-gray-50">Cancel</button>
+                                  <button onClick={handleAddColumn} disabled={!newColName.trim() || newColAdding} className="flex-1 bg-blue-600 text-white py-1 rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50">{newColAdding ? "Adding..." : "Add"}</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setShowAddColumn(true); setNewColName(""); setNewColInstruction(""); setEditingColumnId(null); }}
+                                className="w-full border border-dashed border-gray-300 text-gray-500 text-xs py-1.5 rounded hover:border-blue-400 hover:text-blue-600 transition-colors"
+                              >+ Add Column</button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Run on Document */}
+                        {templateColumns.length > 0 && !extractionResults && (
+                          <div className="pt-1 border-t border-gray-100">
+                            <button
+                              onClick={handleRunExtraction}
+                              disabled={!officeReady || extractionLoading}
+                              className="w-full bg-indigo-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {extractionLoading ? "Extracting..." : "Run on Document"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {extractionLoading && (
