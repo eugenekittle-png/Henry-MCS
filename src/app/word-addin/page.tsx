@@ -13,7 +13,6 @@ interface ChatMessage { role: "user" | "assistant"; content: string }
 interface Suggestion { paragraphIndex: number; replacement: string; reason: string }
 interface MatrixTemplate { id: number; name: string; description: string; column_count: number }
 interface MatrixColumn { id: number; column_name: string; instruction: string | null }
-interface ExtractionResult { values: Record<string, string | null>; columns: string[] }
 
 
 export default function WordAddinPage() {
@@ -74,9 +73,10 @@ export default function WordAddinPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | "">("");
   const [templateColumns, setTemplateColumns] = useState<MatrixColumn[]>([]);
   const [templateColumnsLoading, setTemplateColumnsLoading] = useState(false);
-  const [extractionResults, setExtractionResults] = useState<ExtractionResult | null>(null);
+  const [columnValues, setColumnValues] = useState<Record<string, string>>({});
   const [extractionLoading, setExtractionLoading] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   // Template create state
   const [showNewTemplateForm, setShowNewTemplateForm] = useState(false);
@@ -143,14 +143,14 @@ export default function WordAddinPage() {
       setMatrixTemplates([]);
       setSelectedTemplateId("");
       setTemplateColumns([]);
-      setExtractionResults(null);
+      setColumnValues({});
       return;
     }
     setMatrixTemplatesLoading(true);
     setMatrixTemplates([]);
     setSelectedTemplateId("");
     setTemplateColumns([]);
-    setExtractionResults(null);
+    setColumnValues({});
     const headers: HeadersInit = {};
     if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
     fetch(
@@ -165,10 +165,10 @@ export default function WordAddinPage() {
 
   // Fetch columns when a template is selected
   useEffect(() => {
-    if (!selectedTemplateId) { setTemplateColumns([]); setExtractionResults(null); return; }
+    if (!selectedTemplateId) { setTemplateColumns([]); setColumnValues({}); return; }
     setTemplateColumnsLoading(true);
     setTemplateColumns([]);
-    setExtractionResults(null);
+    setColumnValues({});
     const headers: HeadersInit = {};
     if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
     fetch(`/api/matrix/templates/${selectedTemplateId}/columns`, { headers })
@@ -343,8 +343,9 @@ export default function WordAddinPage() {
     setMatrixTemplates([]);
     setSelectedTemplateId("");
     setTemplateColumns([]);
-    setExtractionResults(null);
+    setColumnValues({});
     setExtractionError(null);
+    setCaptureError(null);
     setExtractionLoading(false);
     setShowNewTemplateForm(false);
     setNewTemplateName("");
@@ -357,7 +358,7 @@ export default function WordAddinPage() {
 
   async function handleRunExtraction() {
     if (!officeReady || !selectedTemplateId) return;
-    setExtractionResults(null);
+    setColumnValues({});
     setExtractionError(null);
     setExtractionLoading(true);
 
@@ -395,11 +396,32 @@ export default function WordAddinPage() {
         throw new Error(errMsg);
       }
       const data = await res.json();
-      setExtractionResults({ values: data.values, columns: data.columns });
+      const newValues: Record<string, string> = {};
+      for (const col of (data.columns as string[])) {
+        if (data.values[col] != null) newValues[col] = String(data.values[col]);
+      }
+      setColumnValues(newValues);
     } catch (err) {
       setExtractionError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setExtractionLoading(false);
+    }
+  }
+
+  async function handleCaptureToColumn(colName: string) {
+    if (!officeReady) return;
+    try {
+      const text = await getDocumentText(true);
+      if (!text.trim()) {
+        setCaptureError("No text selected — highlight text in the document first.");
+        setTimeout(() => setCaptureError(null), 3000);
+        return;
+      }
+      setColumnValues(prev => ({ ...prev, [colName]: text.trim() }));
+      setCaptureError(null);
+    } catch {
+      setCaptureError("Could not read the document selection.");
+      setTimeout(() => setCaptureError(null), 3000);
     }
   }
 
@@ -527,8 +549,11 @@ export default function WordAddinPage() {
   }
 
   async function handleInsertResultsIntoDoc() {
-    if (!officeReady || !extractionResults) return;
-    const lines = extractionResults.columns.map(col => `${col}: ${extractionResults.values[col] ?? "—"}`);
+    if (!officeReady) return;
+    const lines = templateColumns
+      .filter(col => columnValues[col.column_name])
+      .map(col => `${col.column_name}: ${columnValues[col.column_name]}`);
+    if (lines.length === 0) return;
     await insertIntoDocument(lines.join("\n"));
   }
 
@@ -1384,7 +1409,7 @@ export default function WordAddinPage() {
                               value={selectedTemplateId}
                               onChange={e => {
                                 setSelectedTemplateId(e.target.value ? Number(e.target.value) : "");
-                                setExtractionResults(null);
+                                setColumnValues({});
                                 setEditingColumnId(null);
                                 setShowAddColumn(false);
                                 setSuggestColumnsError(null);
@@ -1480,23 +1505,41 @@ export default function WordAddinPage() {
                                   </div>
                                 </div>
                               ) : (
-                                <div key={col.id} className="flex items-start gap-1.5 bg-white border border-gray-100 rounded px-2 py-1.5">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-gray-800 truncate">{col.column_name}</p>
-                                    {col.instruction && <p className="text-xs text-gray-400 truncate">{col.instruction}</p>}
+                                <div key={col.id} className={`rounded border overflow-hidden ${columnValues[col.column_name] ? "border-green-200" : "border-gray-100"}`}>
+                                  <div className="flex items-start gap-1.5 bg-white px-2 py-1.5">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium text-gray-800 truncate">{col.column_name}</p>
+                                      {col.instruction && <p className="text-xs text-gray-400 truncate">{col.instruction}</p>}
+                                    </div>
+                                    <div className="flex gap-1.5 flex-shrink-0 mt-0.5">
+                                      <button
+                                        onClick={() => handleCaptureToColumn(col.column_name)}
+                                        disabled={!officeReady}
+                                        className="text-blue-500 hover:text-blue-700 disabled:opacity-30 text-xs font-bold leading-none"
+                                        title="Capture highlighted text from document"
+                                      >←</button>
+                                      <button
+                                        onClick={() => { setEditingColumnId(col.id); setEditColName(col.column_name); setEditColInstruction(col.instruction ?? ""); }}
+                                        className="text-gray-400 hover:text-blue-600 text-xs leading-none"
+                                        title="Edit column"
+                                      >✎</button>
+                                      <button
+                                        onClick={() => handleDeleteColumn(col.id)}
+                                        className="text-gray-400 hover:text-red-500 text-xs leading-none"
+                                        title="Delete column"
+                                      >×</button>
+                                    </div>
                                   </div>
-                                  <div className="flex gap-1.5 flex-shrink-0 mt-0.5">
-                                    <button
-                                      onClick={() => { setEditingColumnId(col.id); setEditColName(col.column_name); setEditColInstruction(col.instruction ?? ""); }}
-                                      className="text-gray-400 hover:text-blue-600 text-xs leading-none"
-                                      title="Edit"
-                                    >✎</button>
-                                    <button
-                                      onClick={() => handleDeleteColumn(col.id)}
-                                      className="text-gray-400 hover:text-red-500 text-xs leading-none"
-                                      title="Delete"
-                                    >×</button>
-                                  </div>
+                                  {columnValues[col.column_name] && (
+                                    <div className="flex items-start gap-1 px-2 py-1.5 bg-green-50 border-t border-green-100">
+                                      <p className="flex-1 text-xs text-green-800 break-words leading-relaxed">{columnValues[col.column_name]}</p>
+                                      <button
+                                        onClick={() => setColumnValues(prev => { const n = { ...prev }; delete n[col.column_name]; return n; })}
+                                        className="text-green-400 hover:text-red-400 text-xs flex-shrink-0 mt-0.5"
+                                        title="Clear value"
+                                      >×</button>
+                                    </div>
+                                  )}
                                 </div>
                               )
                             ))}
@@ -1533,61 +1576,46 @@ export default function WordAddinPage() {
                           </div>
                         )}
 
-                        {/* Run on Document */}
-                        {templateColumns.length > 0 && !extractionResults && (
-                          <div className="pt-1 border-t border-gray-100">
+                        {/* Footer: progress + capture error + actions */}
+                        {templateColumns.length > 0 && (
+                          <div className="pt-2 border-t border-gray-100 space-y-1.5">
+                            {(() => {
+                              const captured = templateColumns.filter(c => columnValues[c.column_name]).length;
+                              return captured > 0 ? (
+                                <p className="text-xs text-gray-500 text-center">{captured} of {templateColumns.length} captured</p>
+                              ) : (
+                                <p className="text-xs text-gray-400 text-center">Highlight text in Word, then click ← to capture</p>
+                              );
+                            })()}
+                            {captureError && (
+                              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 text-center">{captureError}</p>
+                            )}
+                            {Object.keys(columnValues).length > 0 && (
+                              <button
+                                onClick={handleInsertResultsIntoDoc}
+                                disabled={!officeReady}
+                                className="w-full bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
+                              >Insert into Document</button>
+                            )}
                             <button
                               onClick={handleRunExtraction}
                               disabled={!officeReady || extractionLoading}
-                              className="w-full bg-indigo-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="w-full bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {extractionLoading ? "Extracting..." : "Run on Document"}
+                              {extractionLoading ? (
+                                <span className="flex items-center justify-center gap-1.5">
+                                  <span className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
+                                  <span className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
+                                  <span className="w-1 h-1 bg-white rounded-full animate-bounce" />
+                                  <span>Extracting...</span>
+                                </span>
+                              ) : Object.keys(columnValues).length > 0 ? "Re-run AI Extraction" : "AI Extract All"}
                             </button>
+                            {extractionError && (
+                              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{extractionError}</p>
+                            )}
                           </div>
                         )}
-                      </div>
-                    )}
-
-                    {extractionLoading && (
-                      <div className="flex items-center gap-2 text-gray-400 text-xs">
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
-                        <span>Extracting data from document...</span>
-                      </div>
-                    )}
-
-                    {extractionError && (
-                      <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">{extractionError}</div>
-                    )}
-
-                    {/* Results table */}
-                    {extractionResults && !extractionLoading && (
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold text-gray-600">Results</p>
-                        <div className="border border-gray-200 rounded overflow-hidden">
-                          {extractionResults.columns.map(col => (
-                            <div key={col} className="flex border-b border-gray-100 last:border-b-0">
-                              <div className="w-2/5 px-2 py-1.5 bg-gray-50 text-xs font-medium text-gray-600 border-r border-gray-100 break-words">{col}</div>
-                              <div className="flex-1 px-2 py-1.5 text-xs text-gray-800 break-words">
-                                {extractionResults.values[col] ?? <span className="text-gray-400 italic">Not found</span>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <button
-                          onClick={handleInsertResultsIntoDoc}
-                          disabled={!officeReady}
-                          className="w-full bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
-                        >
-                          Insert into Document
-                        </button>
-                        <button
-                          onClick={() => { setExtractionResults(null); setExtractionError(null); }}
-                          className="w-full bg-white border border-gray-200 text-gray-600 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50"
-                        >
-                          Run Again
-                        </button>
                       </div>
                     )}
 
