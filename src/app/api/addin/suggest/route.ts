@@ -98,6 +98,8 @@ export async function POST(req: NextRequest) {
       tokensOutput: message.usage.output_tokens,
       success: true,
       ipAddress: ip,
+      promptText: userMessage,
+      responseText: textBlock.text,
     });
 
     return NextResponse.json({ suggestions });

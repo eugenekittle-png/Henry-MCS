@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     let tokensInput = 0;
     let tokensOutput = 0;
+    let assistantText = "";
 
     const readable = new ReadableStream({
       async start(controller) {
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest) {
             } else if (event.type === "message_delta") {
               tokensOutput = event.usage.output_tokens;
             } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              assistantText += event.delta.text;
               emit(controller, encoder, { text: event.delta.text });
             }
           }
@@ -125,7 +127,20 @@ export async function POST(req: NextRequest) {
           emit(controller, encoder, { error: message });
           controller.close();
         } finally {
-          logAction({ username: session?.email ?? null, action: "Breakdown-File", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success, ipAddress: ip });
+          const promptText = `${contextPrefix}${isImage ? "Analyze image" : "Summarize document"}: ${fileName}`;
+          logAction({
+            username: session?.email ?? null,
+            action: "Breakdown-File",
+            clientNumber,
+            matterNumber,
+            details: contextDetails,
+            tokensInput,
+            tokensOutput,
+            success,
+            ipAddress: ip,
+            promptText,
+            responseText: assistantText || null,
+          });
         }
       },
     });

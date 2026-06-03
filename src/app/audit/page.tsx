@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAuth } from "@/components/AuthContext";
 import { downloadCSV } from "@/lib/csv";
 
@@ -17,6 +19,8 @@ interface AuditLog {
   tokens_output: number | null;
   success: number;
   ip_address: string | null;
+  prompt_text: string | null;
+  response_text: string | null;
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -220,9 +224,10 @@ export default function AuditPage() {
               {filtered.map((log) => {
                 const details = parseDetails(log.details);
                 const isExpanded = expandedId === log.id;
+                const hasTranscript = !!(log.prompt_text || log.response_text);
                 return (
+                  <Fragment key={log.id}>
                   <tr
-                    key={log.id}
                     className="border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer"
                     onClick={() => setExpandedId(isExpanded ? null : log.id)}
                   >
@@ -248,17 +253,13 @@ export default function AuditPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
                       {details ? (
-                        isExpanded ? (
-                          <pre className="whitespace-pre-wrap text-xs text-gray-700 bg-gray-50 rounded p-2 mt-1">
-                            {JSON.stringify(details, null, 2)}
-                          </pre>
-                        ) : (
-                          <span className="truncate block max-w-xs">
-                            {typeof details === "object"
-                              ? Object.entries(details).map(([k, v]) => `${k}: ${v}`).join(", ")
-                              : String(details)}
-                          </span>
-                        )
+                        <span className="truncate block max-w-xs">
+                          {typeof details === "object"
+                            ? Object.entries(details).map(([k, v]) => `${k}: ${v}`).join(", ")
+                            : String(details)}
+                        </span>
+                      ) : hasTranscript ? (
+                        <span className="text-gray-400 italic">click to view transcript</span>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
@@ -278,6 +279,43 @@ export default function AuditPage() {
                       <span className={`inline-block w-2 h-2 rounded-full ${log.success ? "bg-green-500" : "bg-red-500"}`} title={log.success ? "Success" : "Failed"} />
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <td colSpan={9} className="px-4 py-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          <div className="flex flex-col">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Prompt</div>
+                            {log.prompt_text ? (
+                              <pre className="whitespace-pre-wrap text-xs text-gray-800 bg-white border border-gray-200 rounded p-3 max-h-96 overflow-auto font-mono">
+                                {log.prompt_text}
+                              </pre>
+                            ) : (
+                              <div className="text-xs text-gray-400 italic bg-white border border-gray-200 rounded p-3">No prompt captured</div>
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Response</div>
+                            {log.response_text ? (
+                              <div className="prose prose-sm max-w-none text-xs text-gray-800 bg-white border border-gray-200 rounded p-3 max-h-96 overflow-auto">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{log.response_text}</ReactMarkdown>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-gray-400 italic bg-white border border-gray-200 rounded p-3">No response captured</div>
+                            )}
+                          </div>
+                        </div>
+                        {details && (
+                          <div className="mt-4">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1.5">Details</div>
+                            <pre className="whitespace-pre-wrap text-xs text-gray-700 bg-white border border-gray-200 rounded p-3 font-mono">
+                              {JSON.stringify(details, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
               {filtered.length === 0 && (

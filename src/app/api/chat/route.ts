@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     let tokensInput = 0;
     let tokensOutput = 0;
+    let assistantText = "";
 
     const readable = new ReadableStream({
       async start(controller) {
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
             } else if (event.type === "message_delta") {
               tokensOutput = event.usage.output_tokens;
             } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              assistantText += event.delta.text;
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
             }
           }
@@ -84,13 +86,14 @@ export async function POST(req: NextRequest) {
             matterNumber: isWordAddin ? (matterNumber || null) : null,
             details: {
               source: source || undefined,
-              question: suspiciousFlags.length > 0 ? question : question.slice(0, 200),
               ...(suspiciousFlags.length > 0 ? { suspicious: true, suspiciousFlags } : {}),
             },
             tokensInput,
             tokensOutput,
             success,
             ipAddress: ip,
+            promptText: question || null,
+            responseText: assistantText || null,
           });
         }
       },

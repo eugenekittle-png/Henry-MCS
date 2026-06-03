@@ -19,6 +19,8 @@ export async function logAction(params: {
   tokensOutput?: number;
   success: boolean;
   ipAddress?: string | null;
+  promptText?: string | null;
+  responseText?: string | null;
 }) {
   try {
     await insertAuditLog(params);

@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     let tokensInput = 0;
     let tokensOutput = 0;
+    let assistantText = "";
 
     const readable = new ReadableStream({
       async start(controller) {
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * (attempt - 1)));
           }
           try {
+            assistantText = "";
             const stream = createStream(ASSIST_SYSTEM_PROMPT, userMessage);
             for await (const event of stream) {
               if (event.type === "message_start") {
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
               } else if (event.type === "message_delta") {
                 tokensOutput = event.usage.output_tokens;
               } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+                assistantText += event.delta.text;
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
               }
             }
@@ -84,11 +87,13 @@ export async function POST(req: NextRequest) {
           action: logActionName,
           clientNumber: clientNumber || null,
           matterNumber: matterNumber || null,
-          details: { source: "word-addin", prompt: prompt.slice(0, 200), client: client || undefined, matter: matter || undefined },
+          details: { source: "word-addin", client: client || undefined, matter: matter || undefined },
           tokensInput,
           tokensOutput,
           success,
           ipAddress: ip,
+          promptText: prompt,
+          responseText: assistantText || null,
         });
       },
     });

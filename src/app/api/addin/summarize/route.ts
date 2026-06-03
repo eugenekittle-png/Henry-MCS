@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     let tokensInput = 0;
     let tokensOutput = 0;
+    let assistantText = "";
 
     const readable = new ReadableStream({
       async start(controller) {
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
             } else if (event.type === "message_delta") {
               tokensOutput = event.usage.output_tokens;
             } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              assistantText += event.delta.text;
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
             }
           }
@@ -64,6 +66,8 @@ export async function POST(req: NextRequest) {
             tokensOutput,
             success,
             ipAddress: ip,
+            promptText: userMessage,
+            responseText: assistantText || null,
           });
         }
       },

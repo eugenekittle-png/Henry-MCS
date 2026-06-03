@@ -130,8 +130,8 @@ async function ensureInit() {
     )
   `);
 
-  // Migrate: add client_number / matter_number / ip_address columns to existing audit_logs tables
-  for (const col of ["client_number", "matter_number", "ip_address"]) {
+  // Migrate: add client_number / matter_number / ip_address / prompt_text / response_text columns to existing audit_logs tables
+  for (const col of ["client_number", "matter_number", "ip_address", "prompt_text", "response_text"]) {
     try {
       await db.execute(`ALTER TABLE audit_logs ADD COLUMN ${col} TEXT`);
     } catch {
@@ -661,11 +661,13 @@ export async function insertAuditLog(params: {
   tokensOutput?: number;
   success: boolean;
   ipAddress?: string | null;
+  promptText?: string | null;
+  responseText?: string | null;
 }) {
   await ensureInit();
   await db.execute({
-    sql: `INSERT INTO audit_logs (username, action, client_number, matter_number, details, tokens_input, tokens_output, success, ip_address)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO audit_logs (username, action, client_number, matter_number, details, tokens_input, tokens_output, success, ip_address, prompt_text, response_text)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       params.username ?? null,
       params.action,
@@ -676,6 +678,8 @@ export async function insertAuditLog(params: {
       params.tokensOutput ?? null,
       params.success ? 1 : 0,
       params.ipAddress ?? null,
+      params.promptText ?? null,
+      params.responseText ?? null,
     ],
   });
 }
@@ -683,7 +687,7 @@ export async function insertAuditLog(params: {
 export async function getAuditLogs(limit = 200, offset = 0) {
   await ensureInit();
   const result = await db.execute({
-    sql: `SELECT id, created_at, username, action, client_number, matter_number, details, tokens_input, tokens_output, success, ip_address
+    sql: `SELECT id, created_at, username, action, client_number, matter_number, details, tokens_input, tokens_output, success, ip_address, prompt_text, response_text
           FROM audit_logs ORDER BY id DESC LIMIT ? OFFSET ?`,
     args: [limit, offset],
   });
@@ -699,6 +703,8 @@ export async function getAuditLogs(limit = 200, offset = 0) {
     tokens_output: number | null;
     success: number;
     ip_address: string | null;
+    prompt_text: string | null;
+    response_text: string | null;
   }[];
 }
 

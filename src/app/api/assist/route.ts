@@ -136,11 +136,15 @@ export async function POST(req: NextRequest) {
       { role: "user", content: userMessageContent as MessageParam["content"] },
     ];
 
-    const stream = createChatStream(ASSIST_SYSTEM_PROMPT, apiMessages);
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const systemPrompt = `${ASSIST_SYSTEM_PROMPT}\n\nThe current date is ${today}.`;
+
+    const stream = createChatStream(systemPrompt, apiMessages);
 
     const encoder = new TextEncoder();
     let tokensInput = 0;
     let tokensOutput = 0;
+    let assistantText = "";
 
     const readable = new ReadableStream({
       async start(controller) {
@@ -155,6 +159,7 @@ export async function POST(req: NextRequest) {
             } else if (event.type === "message_delta") {
               tokensOutput = event.usage.output_tokens;
             } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              assistantText += event.delta.text;
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`));
             }
           }
@@ -172,7 +177,6 @@ export async function POST(req: NextRequest) {
             clientNumber,
             matterNumber,
             details: {
-              prompt: suspiciousFlags.length > 0 ? prompt : prompt.slice(0, 200),
               files: fileNames,
               ...(edgarFilingNames.length > 0 ? { edgarFilings: edgarFilingNames } : {}),
               ...(courtOpinionNames.length > 0 ? { courtlistener: courtOpinionNames } : {}),
@@ -182,6 +186,8 @@ export async function POST(req: NextRequest) {
             tokensOutput,
             success,
             ipAddress: ip,
+            promptText: prompt,
+            responseText: assistantText || null,
           });
         }
       },

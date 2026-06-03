@@ -60,6 +60,8 @@ export async function POST(req: NextRequest) {
     const encoder = new TextEncoder();
     let tokensInput = 0;
     let tokensOutput = 0;
+    let assistantText = "";
+    const documentNames: string[] = [];
 
     const readable = new ReadableStream({
       async start(controller) {
@@ -79,6 +81,7 @@ export async function POST(req: NextRequest) {
           }
 
           contextDetails.documentCount = documents.length;
+          for (const d of documents) documentNames.push(d.name);
 
           // Phase 2: send to Claude with mixed text/image content
           emit(controller, encoder, { progress: { stage: "analyzing", current: documents.length, total: documents.length, file: "" } });
@@ -119,6 +122,7 @@ export async function POST(req: NextRequest) {
             } else if (event.type === "message_delta") {
               tokensOutput = event.usage.output_tokens;
             } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              assistantText += event.delta.text;
               emit(controller, encoder, { text: event.delta.text });
             }
           }
@@ -131,7 +135,20 @@ export async function POST(req: NextRequest) {
           emit(controller, encoder, { error: message });
           controller.close();
         } finally {
-          logAction({ username: session?.email ?? null, action: "Breakdown", clientNumber, matterNumber, details: contextDetails, tokensInput, tokensOutput, success, ipAddress: ip });
+          const promptText = `${contextPrefix}Breakdown of ${name} (${documentNames.length} document${documentNames.length !== 1 ? "s" : ""}):\n${documentNames.map(n => `- ${n}`).join("\n")}`;
+          logAction({
+            username: session?.email ?? null,
+            action: "Breakdown",
+            clientNumber,
+            matterNumber,
+            details: contextDetails,
+            tokensInput,
+            tokensOutput,
+            success,
+            ipAddress: ip,
+            promptText,
+            responseText: assistantText || null,
+          });
         }
       },
     });
