@@ -43,17 +43,37 @@ export async function POST(req: NextRequest) {
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 8192,
-      system: `You are converting a filled-in legal document into a reusable template. For each variable (column) below, find the EXACT literal text in the document that represents that variable's current value.
-
-Return ONLY a valid JSON array. Each element must have:
-- "column_name": the exact column name from the list below
-- "matched_text": the literal substring copied VERBATIM from the document that is the current value for that variable
+      tools: [
+        {
+          name: "report_variables",
+          description: "Report the verbatim document text that corresponds to each template variable.",
+          input_schema: {
+            type: "object",
+            properties: {
+              variables: {
+                type: "array",
+                description: "One entry per variable for which a clear value was found in the document.",
+                items: {
+                  type: "object",
+                  properties: {
+                    column_name: { type: "string", description: "The exact column name from the provided list." },
+                    matched_text: { type: "string", description: "The value text copied VERBATIM and contiguously from the document, so it can be located and replaced. The value itself, not the surrounding label. Under 200 characters." },
+                  },
+                  required: ["column_name", "matched_text"],
+                },
+              },
+            },
+            required: ["variables"],
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "report_variables" },
+      system: `You are converting a filled-in legal document into a reusable template. For each variable (column) below, find the EXACT literal text in the document that represents that variable's current value, and report it via the report_variables tool.
 
 Rules:
-- "matched_text" must be an exact, contiguous substring of the document so it can be located and replaced — do not paraphrase, trim differently, or add quotes.
+- matched_text must be an exact, contiguous substring of the document so it can be located and replaced — do not paraphrase or add quotes.
 - Keep matched_text as short as possible while still uniquely identifying the value (the value itself, not the surrounding label).
 - Only include a column if you find a clear, specific value in the document. Omit columns with no obvious value.
-- Each matched_text should be under 200 characters.
 
 Columns:
 ${columnList}`,
@@ -62,22 +82,18 @@ ${columnList}`,
       ],
     });
 
-    const raw = message.content[0].type === "text" ? message.content[0].text : "[]";
+    const toolUse = message.content.find((b) => b.type === "tool_use");
     let variables: { column_name: string; matched_text: string }[];
-    try {
-      // Strip code fences, then isolate the JSON array (model may add prose before/after)
-      let cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-      const start = cleaned.indexOf("[");
-      const end = cleaned.lastIndexOf("]");
-      if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
-      variables = JSON.parse(cleaned);
-      if (!Array.isArray(variables)) throw new Error("Not an array");
-    } catch {
+    if (toolUse && toolUse.type === "tool_use") {
+      const input = toolUse.input as { variables?: { column_name: string; matched_text: string }[] };
+      variables = Array.isArray(input.variables) ? input.variables : [];
+    } else {
       const truncated = message.stop_reason === "max_tokens";
+      console.error("[detect-variables] no tool_use block; stop_reason:", message.stop_reason);
       return NextResponse.json({
         error: truncated
           ? "The document has too many variables to detect in one pass. Try a template with fewer columns, or insert variables manually."
-          : "Could not parse detection results from AI response.",
+          : "Could not detect variables from the document. Try again or insert variables manually.",
       }, { status: 500 });
     }
 
