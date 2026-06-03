@@ -73,10 +73,14 @@ export default function WordAddinPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | "">("");
   const [templateColumns, setTemplateColumns] = useState<MatrixColumn[]>([]);
   const [templateColumnsLoading, setTemplateColumnsLoading] = useState(false);
-  const [columnValues, setColumnValues] = useState<Record<string, string>>({});
-  const [extractionLoading, setExtractionLoading] = useState(false);
-  const [extractionError, setExtractionError] = useState<string | null>(null);
-  const [captureError, setCaptureError] = useState<string | null>(null);
+  // Variable placement state — tracks how many times each column has been placed in the doc as a content control
+  const [insertedCounts, setInsertedCounts] = useState<Record<string, number>>({});
+  const [insertError, setInsertError] = useState<string | null>(null);
+  // AI auto-detect state
+  const [detecting, setDetecting] = useState(false);
+  const [detectError, setDetectError] = useState<string | null>(null);
+  const [detectedVars, setDetectedVars] = useState<{ column_name: string; matched_text: string }[] | null>(null);
+  const [placingVar, setPlacingVar] = useState<string | null>(null);
 
   // Template create state
   const [showNewTemplateForm, setShowNewTemplateForm] = useState(false);
@@ -143,14 +147,14 @@ export default function WordAddinPage() {
       setMatrixTemplates([]);
       setSelectedTemplateId("");
       setTemplateColumns([]);
-      setColumnValues({});
+      setInsertedCounts({}); setDetectedVars(null); setInsertError(null);
       return;
     }
     setMatrixTemplatesLoading(true);
     setMatrixTemplates([]);
     setSelectedTemplateId("");
     setTemplateColumns([]);
-    setColumnValues({});
+    setInsertedCounts({}); setDetectedVars(null); setInsertError(null);
     const headers: HeadersInit = {};
     if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
     fetch(
@@ -165,10 +169,10 @@ export default function WordAddinPage() {
 
   // Fetch columns when a template is selected
   useEffect(() => {
-    if (!selectedTemplateId) { setTemplateColumns([]); setColumnValues({}); return; }
+    if (!selectedTemplateId) { setTemplateColumns([]); setInsertedCounts({}); setDetectedVars(null); return; }
     setTemplateColumnsLoading(true);
     setTemplateColumns([]);
-    setColumnValues({});
+    setInsertedCounts({}); setDetectedVars(null); setInsertError(null);
     const headers: HeadersInit = {};
     if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
     fetch(`/api/matrix/templates/${selectedTemplateId}/columns`, { headers })
@@ -343,10 +347,11 @@ export default function WordAddinPage() {
     setMatrixTemplates([]);
     setSelectedTemplateId("");
     setTemplateColumns([]);
-    setColumnValues({});
-    setExtractionError(null);
-    setCaptureError(null);
-    setExtractionLoading(false);
+    setInsertedCounts({});
+    setInsertError(null);
+    setDetectedVars(null);
+    setDetectError(null);
+    setDetecting(false);
     setShowNewTemplateForm(false);
     setNewTemplateName("");
     setEditingColumnId(null);
@@ -356,72 +361,117 @@ export default function WordAddinPage() {
     setSuggestColumnsError(null);
   }
 
-  async function handleRunExtraction() {
+  // Wrap a Word range in a content control representing a template variable
+  async function wrapRangeAsVariable(context: any, range: any, colName: string) {
+    const cc = range.insertContentControl();
+    cc.tag = colName;
+    cc.title = colName;
+    cc.appearance = "BoundingBox";
+    cc.color = "#2563eb";
+    cc.insertText(colName, "Replace");
+    await context.sync();
+  }
+
+  // Manual: replace the current selection with a variable content control
+  async function handleInsertVariable(colName: string) {
+    if (!officeReady) return;
+    setInsertError(null);
+    try {
+      const placed = await (window as any).Word.run(async (context: any) => {
+        const sel = context.document.getSelection();
+        sel.load("text");
+        await context.sync();
+        if (!(sel.text as string).trim()) return false;
+        await wrapRangeAsVariable(context, sel, colName);
+        return true;
+      });
+      if (!placed) {
+        setInsertError("Highlight text in the document first, then click ← to turn it into a variable.");
+        setTimeout(() => setInsertError(null), 3500);
+        return;
+      }
+      setInsertedCounts(prev => ({ ...prev, [colName]: (prev[colName] ?? 0) + 1 }));
+    } catch (err) {
+      setInsertError(err instanceof Error ? err.message : "Could not insert the variable.");
+      setTimeout(() => setInsertError(null), 3500);
+    }
+  }
+
+  // AI: scan document for spans that map to template columns
+  async function handleAutoDetect() {
     if (!officeReady || !selectedTemplateId) return;
-    setColumnValues({});
-    setExtractionError(null);
-    setExtractionLoading(true);
+    setDetecting(true);
+    setDetectError(null);
+    setDetectedVars(null);
 
     let docText = "";
     try {
       docText = await getDocumentText(false);
     } catch {
-      setExtractionError("Could not read the document. Make sure a Word document is open.");
-      setExtractionLoading(false);
+      setDetectError("Could not read the document.");
+      setDetecting(false);
       return;
     }
-
     if (!docText.trim()) {
-      setExtractionError("The document appears to be empty.");
-      setExtractionLoading(false);
+      setDetectError("The document appears to be empty.");
+      setDetecting(false);
       return;
     }
 
     try {
       const headers: HeadersInit = { "Content-Type": "application/json" };
       if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
-      const res = await fetch("/api/addin/extract", {
+      const res = await fetch("/api/addin/detect-variables", {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          templateId: selectedTemplateId,
-          documentText: docText,
-          clientNumber: selectedClient?.client_number ?? null,
-          matterNumber: selectedMatter?.matter_number ?? null,
-        }),
+        body: JSON.stringify({ templateId: selectedTemplateId, documentText: docText }),
       });
-      if (!res.ok) {
-        let errMsg = `Request failed (${res.status})`;
-        try { const d = await res.json(); if (d.error) errMsg = d.error; } catch { /* non-JSON */ }
-        throw new Error(errMsg);
-      }
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || `Request failed (${res.status})`); }
       const data = await res.json();
-      const newValues: Record<string, string> = {};
-      for (const col of (data.columns as string[])) {
-        if (data.values[col] != null) newValues[col] = String(data.values[col]);
-      }
-      setColumnValues(newValues);
+      const vars = (data.variables ?? []) as { column_name: string; matched_text: string }[];
+      if (vars.length === 0) { setDetectError("No matching variable values found in the document."); }
+      setDetectedVars(vars);
     } catch (err) {
-      setExtractionError(err instanceof Error ? err.message : "Something went wrong");
+      setDetectError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
-      setExtractionLoading(false);
+      setDetecting(false);
     }
   }
 
-  async function handleCaptureToColumn(colName: string) {
+  // Place one detected variable: find its text in the doc and wrap it as a content control
+  async function handlePlaceDetected(proposal: { column_name: string; matched_text: string }) {
     if (!officeReady) return;
+    const search = proposal.matched_text.slice(0, 255);
+    setPlacingVar(proposal.matched_text);
+    setInsertError(null);
     try {
-      const text = await getDocumentText(true);
-      if (!text.trim()) {
-        setCaptureError("No text selected — highlight text in the document first.");
-        setTimeout(() => setCaptureError(null), 3000);
+      const placed = await (window as any).Word.run(async (context: any) => {
+        const results = context.document.body.search(search, { matchCase: false });
+        results.load("items");
+        await context.sync();
+        if (results.items.length === 0) return false;
+        await wrapRangeAsVariable(context, results.items[0], proposal.column_name);
+        return true;
+      });
+      if (!placed) {
+        setInsertError(`Couldn't locate "${proposal.matched_text.slice(0, 40)}…" in the document.`);
+        setTimeout(() => setInsertError(null), 3500);
         return;
       }
-      setColumnValues(prev => ({ ...prev, [colName]: text.trim() }));
-      setCaptureError(null);
-    } catch {
-      setCaptureError("Could not read the document selection.");
-      setTimeout(() => setCaptureError(null), 3000);
+      setInsertedCounts(prev => ({ ...prev, [proposal.column_name]: (prev[proposal.column_name] ?? 0) + 1 }));
+      setDetectedVars(prev => prev ? prev.filter(v => v !== proposal) : prev);
+    } catch (err) {
+      setInsertError(err instanceof Error ? err.message : "Could not place the variable.");
+      setTimeout(() => setInsertError(null), 3500);
+    } finally {
+      setPlacingVar(null);
+    }
+  }
+
+  async function handlePlaceAllDetected() {
+    if (!detectedVars) return;
+    for (const proposal of [...detectedVars]) {
+      await handlePlaceDetected(proposal);
     }
   }
 
@@ -546,15 +596,6 @@ export default function WordAddinPage() {
     } finally {
       setSuggestingColumns(false);
     }
-  }
-
-  async function handleInsertResultsIntoDoc() {
-    if (!officeReady) return;
-    const lines = templateColumns
-      .filter(col => columnValues[col.column_name])
-      .map(col => `${col.column_name}: ${columnValues[col.column_name]}`);
-    if (lines.length === 0) return;
-    await insertIntoDocument(lines.join("\n"));
   }
 
   function clearSuggestMode() {
@@ -1409,7 +1450,7 @@ export default function WordAddinPage() {
                               value={selectedTemplateId}
                               onChange={e => {
                                 setSelectedTemplateId(e.target.value ? Number(e.target.value) : "");
-                                setColumnValues({});
+                                setInsertedCounts({}); setDetectedVars(null); setInsertError(null);
                                 setEditingColumnId(null);
                                 setShowAddColumn(false);
                                 setSuggestColumnsError(null);
@@ -1505,41 +1546,34 @@ export default function WordAddinPage() {
                                   </div>
                                 </div>
                               ) : (
-                                <div key={col.id} className={`rounded border overflow-hidden ${columnValues[col.column_name] ? "border-green-200" : "border-gray-100"}`}>
-                                  <div className="flex items-start gap-1.5 bg-white px-2 py-1.5">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium text-gray-800 truncate">{col.column_name}</p>
-                                      {col.instruction && <p className="text-xs text-gray-400 truncate">{col.instruction}</p>}
-                                    </div>
-                                    <div className="flex gap-1.5 flex-shrink-0 mt-0.5">
-                                      <button
-                                        onClick={() => handleCaptureToColumn(col.column_name)}
-                                        disabled={!officeReady}
-                                        className="text-blue-500 hover:text-blue-700 disabled:opacity-30 text-xs font-bold leading-none"
-                                        title="Capture highlighted text from document"
-                                      >←</button>
-                                      <button
-                                        onClick={() => { setEditingColumnId(col.id); setEditColName(col.column_name); setEditColInstruction(col.instruction ?? ""); }}
-                                        className="text-gray-400 hover:text-blue-600 text-xs leading-none"
-                                        title="Edit column"
-                                      >✎</button>
-                                      <button
-                                        onClick={() => handleDeleteColumn(col.id)}
-                                        className="text-gray-400 hover:text-red-500 text-xs leading-none"
-                                        title="Delete column"
-                                      >×</button>
-                                    </div>
+                                <div key={col.id} className="flex items-center gap-1.5 bg-white border border-gray-100 rounded px-2 py-1.5">
+                                  <button
+                                    onClick={() => handleInsertVariable(col.column_name)}
+                                    disabled={!officeReady}
+                                    className="flex-shrink-0 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5 font-medium hover:bg-blue-100 disabled:opacity-30"
+                                    title="Replace the highlighted text in the document with this variable"
+                                  >→ Insert</button>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-gray-800 truncate">
+                                      {col.column_name}
+                                      {(insertedCounts[col.column_name] ?? 0) > 0 && (
+                                        <span className="ml-1 text-green-600">✓{insertedCounts[col.column_name] > 1 ? ` ${insertedCounts[col.column_name]}` : ""}</span>
+                                      )}
+                                    </p>
+                                    {col.instruction && <p className="text-xs text-gray-400 truncate">{col.instruction}</p>}
                                   </div>
-                                  {columnValues[col.column_name] && (
-                                    <div className="flex items-start gap-1 px-2 py-1.5 bg-green-50 border-t border-green-100">
-                                      <p className="flex-1 text-xs text-green-800 break-words leading-relaxed">{columnValues[col.column_name]}</p>
-                                      <button
-                                        onClick={() => setColumnValues(prev => { const n = { ...prev }; delete n[col.column_name]; return n; })}
-                                        className="text-green-400 hover:text-red-400 text-xs flex-shrink-0 mt-0.5"
-                                        title="Clear value"
-                                      >×</button>
-                                    </div>
-                                  )}
+                                  <div className="flex gap-1.5 flex-shrink-0">
+                                    <button
+                                      onClick={() => { setEditingColumnId(col.id); setEditColName(col.column_name); setEditColInstruction(col.instruction ?? ""); }}
+                                      className="text-gray-400 hover:text-blue-600 text-xs leading-none"
+                                      title="Edit column"
+                                    >✎</button>
+                                    <button
+                                      onClick={() => handleDeleteColumn(col.id)}
+                                      className="text-gray-400 hover:text-red-500 text-xs leading-none"
+                                      title="Delete column"
+                                    >×</button>
+                                  </div>
                                 </div>
                               )
                             ))}
@@ -1576,43 +1610,65 @@ export default function WordAddinPage() {
                           </div>
                         )}
 
-                        {/* Footer: progress + capture error + actions */}
+                        {/* Footer: status + AI auto-detect */}
                         {templateColumns.length > 0 && (
-                          <div className="pt-2 border-t border-gray-100 space-y-1.5">
+                          <div className="pt-2 border-t border-gray-100 space-y-2">
                             {(() => {
-                              const captured = templateColumns.filter(c => columnValues[c.column_name]).length;
-                              return captured > 0 ? (
-                                <p className="text-xs text-gray-500 text-center">{captured} of {templateColumns.length} captured</p>
+                              const placed = templateColumns.filter(c => (insertedCounts[c.column_name] ?? 0) > 0).length;
+                              return placed > 0 ? (
+                                <p className="text-xs text-gray-500 text-center">{placed} of {templateColumns.length} variables placed</p>
                               ) : (
-                                <p className="text-xs text-gray-400 text-center">Highlight text in Word, then click ← to capture</p>
+                                <p className="text-xs text-gray-400 text-center">Highlight text in Word, then click → Insert to turn it into a variable</p>
                               );
                             })()}
-                            {captureError && (
-                              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 text-center">{captureError}</p>
+
+                            {insertError && (
+                              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 text-center">{insertError}</p>
                             )}
-                            {Object.keys(columnValues).length > 0 && (
-                              <button
-                                onClick={handleInsertResultsIntoDoc}
-                                disabled={!officeReady}
-                                className="w-full bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
-                              >Insert into Document</button>
+
+                            {/* Auto-detect proposals */}
+                            {detectedVars && detectedVars.length > 0 && (
+                              <div className="space-y-1.5 bg-indigo-50 border border-indigo-100 rounded p-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold text-indigo-800">Detected ({detectedVars.length})</p>
+                                  <button onClick={handlePlaceAllDetected} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Insert all</button>
+                                </div>
+                                {detectedVars.map((v, i) => (
+                                  <div key={i} className="bg-white border border-indigo-100 rounded px-2 py-1.5">
+                                    <p className="text-xs font-medium text-gray-800">{v.column_name}</p>
+                                    <p className="text-xs text-gray-500 break-words leading-snug mb-1">{v.matched_text}</p>
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        onClick={() => handlePlaceDetected(v)}
+                                        disabled={!officeReady || placingVar === v.matched_text}
+                                        className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded font-medium hover:bg-indigo-700 disabled:opacity-50"
+                                      >{placingVar === v.matched_text ? "Inserting…" : "Insert"}</button>
+                                      <button
+                                        onClick={() => setDetectedVars(prev => prev ? prev.filter(x => x !== v) : prev)}
+                                        className="text-xs border border-gray-200 text-gray-500 px-2 py-0.5 rounded hover:bg-gray-50"
+                                      >Skip</button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             )}
+
                             <button
-                              onClick={handleRunExtraction}
-                              disabled={!officeReady || extractionLoading}
+                              onClick={handleAutoDetect}
+                              disabled={!officeReady || detecting}
                               className="w-full bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              {extractionLoading ? (
+                              {detecting ? (
                                 <span className="flex items-center justify-center gap-1.5">
                                   <span className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
                                   <span className="w-1 h-1 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
                                   <span className="w-1 h-1 bg-white rounded-full animate-bounce" />
-                                  <span>Extracting...</span>
+                                  <span>Scanning…</span>
                                 </span>
-                              ) : Object.keys(columnValues).length > 0 ? "Re-run AI Extraction" : "AI Extract All"}
+                              ) : "✨ Auto-detect variables"}
                             </button>
-                            {extractionError && (
-                              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{extractionError}</p>
+                            {detectError && (
+                              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{detectError}</p>
                             )}
                           </div>
                         )}
