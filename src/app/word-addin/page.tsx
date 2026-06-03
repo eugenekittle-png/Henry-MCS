@@ -11,6 +11,9 @@ import { parseContentAndCitations } from "@/lib/citations";
 interface User { username: string; role: string }
 interface ChatMessage { role: "user" | "assistant"; content: string }
 interface Suggestion { paragraphIndex: number; replacement: string; reason: string }
+interface MatrixTemplate { id: number; name: string; description: string; column_count: number }
+interface MatrixColumn { column_name: string; instruction: string | null }
+interface ExtractionResult { values: Record<string, string | null>; columns: string[] }
 
 
 export default function WordAddinPage() {
@@ -62,6 +65,19 @@ export default function WordAddinPage() {
   const askFollowUpEndRef = useRef<HTMLDivElement>(null);
   const tokenRef = useRef<string | null>(null);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"assist" | "automate">("assist");
+
+  // Automate state
+  const [matrixTemplates, setMatrixTemplates] = useState<MatrixTemplate[]>([]);
+  const [matrixTemplatesLoading, setMatrixTemplatesLoading] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | "">("");
+  const [templateColumns, setTemplateColumns] = useState<MatrixColumn[]>([]);
+  const [templateColumnsLoading, setTemplateColumnsLoading] = useState(false);
+  const [extractionResults, setExtractionResults] = useState<ExtractionResult | null>(null);
+  const [extractionLoading, setExtractionLoading] = useState(false);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
+
   useEffect(() => {
     fetch("/api/auth/me")
       .then(r => r.ok ? r.json() : null)
@@ -98,6 +114,53 @@ export default function WordAddinPage() {
     if (selectedMatter) localStorage.setItem("addin_selectedMatter", JSON.stringify(selectedMatter));
     else localStorage.removeItem("addin_selectedMatter");
   }, [selectedMatter]);
+
+  // Set initial tab from URL param (e.g. ?tab=automate from ribbon button)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") === "automate") setActiveTab("automate");
+  }, []);
+
+  // Fetch Matrix templates when automate tab is active and client/matter are selected
+  useEffect(() => {
+    if (activeTab !== "automate" || !selectedClient || !selectedMatter) {
+      setMatrixTemplates([]);
+      setSelectedTemplateId("");
+      setTemplateColumns([]);
+      setExtractionResults(null);
+      return;
+    }
+    setMatrixTemplatesLoading(true);
+    setMatrixTemplates([]);
+    setSelectedTemplateId("");
+    setTemplateColumns([]);
+    setExtractionResults(null);
+    const headers: HeadersInit = {};
+    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+    fetch(
+      `/api/matrix/templates?clientNumber=${encodeURIComponent(selectedClient.client_number)}&matterNumber=${encodeURIComponent(selectedMatter.matter_number)}`,
+      { headers }
+    )
+      .then(r => r.ok ? r.json() : { templates: [] })
+      .then(data => setMatrixTemplates(data.templates ?? []))
+      .catch(() => {})
+      .finally(() => setMatrixTemplatesLoading(false));
+  }, [activeTab, selectedClient, selectedMatter]);
+
+  // Fetch columns when a template is selected
+  useEffect(() => {
+    if (!selectedTemplateId) { setTemplateColumns([]); setExtractionResults(null); return; }
+    setTemplateColumnsLoading(true);
+    setTemplateColumns([]);
+    setExtractionResults(null);
+    const headers: HeadersInit = {};
+    if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+    fetch(`/api/matrix/templates/${selectedTemplateId}/columns`, { headers })
+      .then(r => r.ok ? r.json() : { columns: [] })
+      .then(data => setTemplateColumns(data.columns ?? []))
+      .catch(() => {})
+      .finally(() => setTemplateColumnsLoading(false));
+  }, [selectedTemplateId]);
 
   // When opened from context menu (action=ask), read the selection into the textarea
   useEffect(() => {
@@ -260,6 +323,67 @@ export default function WordAddinPage() {
     setSuggestError(null);
     setSuggestLoading(false);
     setAppliedIndices(new Set());
+    setActiveTab("assist");
+    setMatrixTemplates([]);
+    setSelectedTemplateId("");
+    setTemplateColumns([]);
+    setExtractionResults(null);
+    setExtractionError(null);
+    setExtractionLoading(false);
+  }
+
+  async function handleRunExtraction() {
+    if (!officeReady || !selectedTemplateId) return;
+    setExtractionResults(null);
+    setExtractionError(null);
+    setExtractionLoading(true);
+
+    let docText = "";
+    try {
+      docText = await getDocumentText(false);
+    } catch {
+      setExtractionError("Could not read the document. Make sure a Word document is open.");
+      setExtractionLoading(false);
+      return;
+    }
+
+    if (!docText.trim()) {
+      setExtractionError("The document appears to be empty.");
+      setExtractionLoading(false);
+      return;
+    }
+
+    try {
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (tokenRef.current) headers["Authorization"] = `Bearer ${tokenRef.current}`;
+      const res = await fetch("/api/addin/extract", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          templateId: selectedTemplateId,
+          documentText: docText,
+          clientNumber: selectedClient?.client_number ?? null,
+          matterNumber: selectedMatter?.matter_number ?? null,
+        }),
+      });
+      if (!res.ok) {
+        let errMsg = `Request failed (${res.status})`;
+        try { const d = await res.json(); if (d.error) errMsg = d.error; } catch { /* non-JSON */ }
+        throw new Error(errMsg);
+      }
+      const data = await res.json();
+      setExtractionResults({ values: data.values, columns: data.columns });
+    } catch (err) {
+      setExtractionError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setExtractionLoading(false);
+    }
+  }
+
+  async function handleInsertResultsIntoDoc() {
+    if (!officeReady || !extractionResults) return;
+    const lines = extractionResults.columns.map(col => `${col}: ${extractionResults.values[col] ?? "—"}`);
+    await insertIntoDocument(lines.join("\n"));
   }
 
   function clearSuggestMode() {
@@ -780,8 +904,24 @@ export default function WordAddinPage() {
               </div>
             </div>
 
-            {/* ── Ask / Suggest view ── */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Tab switcher */}
+            <div className="flex border-b border-gray-100 flex-shrink-0 bg-white">
+              <button
+                onClick={() => setActiveTab("assist")}
+                className={`flex-1 py-2 text-xs font-semibold transition-colors ${activeTab === "assist" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                Assist
+              </button>
+              <button
+                onClick={() => setActiveTab("automate")}
+                className={`flex-1 py-2 text-xs font-semibold transition-colors ${activeTab === "automate" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                Automate
+              </button>
+            </div>
+
+            {/* ── Assist tab ── */}
+            {activeTab === "assist" && <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Header — collapsed when a response or suggest result is showing */}
                 {(askContent || askStreaming || suggestActive) ? (
                   <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
@@ -1077,7 +1217,115 @@ export default function WordAddinPage() {
                     <p className="text-xs text-gray-400 text-center mt-6 px-4">Type a request above and click a button to get recommendations.</p>
                   )}
                 </div>
-            </div>
+            </div>}
+
+            {/* ── Automate tab ── */}
+            {activeTab === "automate" && (
+              <div className="flex-1 overflow-y-auto">
+                {matterRequired ? (
+                  <p className="text-xs text-amber-600 text-center mt-6 px-4">Select a client and matter above to load templates.</p>
+                ) : (
+                  <div className="p-3 space-y-3">
+
+                    {/* Template dropdown */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Template</label>
+                      {matrixTemplatesLoading ? (
+                        <p className="text-xs text-gray-400">Loading templates...</p>
+                      ) : matrixTemplates.length === 0 ? (
+                        <p className="text-xs text-gray-400 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">No templates found for this matter. Create one in Matrix first.</p>
+                      ) : (
+                        <select
+                          value={selectedTemplateId}
+                          onChange={e => setSelectedTemplateId(e.target.value ? Number(e.target.value) : "")}
+                          className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="">— Select a template —</option>
+                          {matrixTemplates.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Columns preview */}
+                    {selectedTemplateId !== "" && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Columns</label>
+                        {templateColumnsLoading ? (
+                          <p className="text-xs text-gray-400">Loading columns...</p>
+                        ) : templateColumns.length === 0 ? (
+                          <p className="text-xs text-gray-400">This template has no columns.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {templateColumns.map((col, i) => (
+                              <span key={i} className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded border border-gray-200">
+                                {col.column_name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Run button */}
+                    {selectedTemplateId !== "" && templateColumns.length > 0 && !extractionResults && (
+                      <button
+                        onClick={handleRunExtraction}
+                        disabled={!officeReady || extractionLoading}
+                        className="w-full bg-indigo-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {extractionLoading ? "Extracting..." : "Run on Document"}
+                      </button>
+                    )}
+
+                    {extractionLoading && (
+                      <div className="flex items-center gap-2 text-gray-400 text-xs">
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+                        <span>Extracting data from document...</span>
+                      </div>
+                    )}
+
+                    {extractionError && (
+                      <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">{extractionError}</div>
+                    )}
+
+                    {/* Results table */}
+                    {extractionResults && !extractionLoading && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-600">Results</p>
+                        <div className="border border-gray-200 rounded overflow-hidden">
+                          {extractionResults.columns.map(col => (
+                            <div key={col} className="flex border-b border-gray-100 last:border-b-0">
+                              <div className="w-2/5 px-2 py-1.5 bg-gray-50 text-xs font-medium text-gray-600 border-r border-gray-100 break-words">{col}</div>
+                              <div className="flex-1 px-2 py-1.5 text-xs text-gray-800 break-words">
+                                {extractionResults.values[col] ?? <span className="text-gray-400 italic">Not found</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={handleInsertResultsIntoDoc}
+                          disabled={!officeReady}
+                          className="w-full bg-green-600 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
+                        >
+                          Insert into Document
+                        </button>
+                        <button
+                          onClick={() => { setExtractionResults(null); setExtractionError(null); }}
+                          className="w-full bg-white border border-gray-200 text-gray-600 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50"
+                        >
+                          Run Again
+                        </button>
+                      </div>
+                    )}
+
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
