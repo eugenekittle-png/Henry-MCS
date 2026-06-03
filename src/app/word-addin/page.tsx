@@ -361,14 +361,20 @@ export default function WordAddinPage() {
     setSuggestColumnsError(null);
   }
 
-  // Wrap a Word range in a content control representing a template variable
+  // Wrap a Word range in a content control representing a template variable,
+  // styled so it stands out clearly from regular document text.
   async function wrapRangeAsVariable(context: any, range: any, colName: string) {
     const cc = range.insertContentControl();
-    cc.tag = colName;
+    cc.tag = `var:${colName}`;
     cc.title = colName;
-    cc.appearance = "BoundingBox";
+    cc.appearance = "Tags";
     cc.color = "#2563eb";
-    cc.insertText(colName, "Replace");
+    const r = cc.insertText(`«${colName}»`, "Replace");
+    try {
+      r.font.bold = true;
+      r.font.color = "#1D4ED8";
+      r.font.highlightColor = "#FDE68A";
+    } catch { /* font styling unsupported on this host — content control still applied */ }
     await context.sync();
   }
 

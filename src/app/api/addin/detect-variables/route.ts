@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      max_tokens: 8192,
       system: `You are converting a filled-in legal document into a reusable template. For each variable (column) below, find the EXACT literal text in the document that represents that variable's current value.
 
 Return ONLY a valid JSON array. Each element must have:
@@ -65,11 +65,20 @@ ${columnList}`,
     const raw = message.content[0].type === "text" ? message.content[0].text : "[]";
     let variables: { column_name: string; matched_text: string }[];
     try {
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      // Strip code fences, then isolate the JSON array (model may add prose before/after)
+      let cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      const start = cleaned.indexOf("[");
+      const end = cleaned.lastIndexOf("]");
+      if (start !== -1 && end !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
       variables = JSON.parse(cleaned);
       if (!Array.isArray(variables)) throw new Error("Not an array");
     } catch {
-      return NextResponse.json({ error: "Could not parse detection results from AI response." }, { status: 500 });
+      const truncated = message.stop_reason === "max_tokens";
+      return NextResponse.json({
+        error: truncated
+          ? "The document has too many variables to detect in one pass. Try a template with fewer columns, or insert variables manually."
+          : "Could not parse detection results from AI response.",
+      }, { status: 500 });
     }
 
     // Keep only proposals whose matched_text actually appears in the document and maps to a real column
