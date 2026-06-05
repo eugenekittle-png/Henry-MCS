@@ -6,7 +6,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>e9f3c2b1-7a4d-4e8f-b2c5-1a9d3f7e2b6c</Id>
-  <Version>1.0.0.4</Version>
+  <Version>1.0.0.5</Version>
   <ProviderName>Henry MCS</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
@@ -37,7 +37,7 @@
           <FunctionFile resid="Commands.Url" />
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <OfficeTab id="TabHome">
+            <CustomTab id="HenryMCSTab">
               <Group id="HenryMCSGroup">
                 <Label resid="GroupLabel" />
                 <Icon>
@@ -87,7 +87,9 @@
                   </Action>
                 </Control>
               </Group>
-            </OfficeTab>
+
+              <Label resid="TabLabel" />
+            </CustomTab>
           </ExtensionPoint>
 
           <ExtensionPoint xsi:type="ContextMenu">
@@ -130,6 +132,7 @@
         <bt:Url id="AutomatePane.Url" DefaultValue="https://henry-mcs.vercel.app/word-addin?tab=automate" />
       </bt:Urls>
       <bt:ShortStrings>
+        <bt:String id="TabLabel" DefaultValue="Henry MCS" />
         <bt:String id="GroupLabel" DefaultValue="Henry MCS" />
         <bt:String id="OpenPaneLabel" DefaultValue="Henry MCS" />
         <bt:String id="AskLabel" DefaultValue="Henry MCS: Ask" />
