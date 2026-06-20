@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { IMAGE_EXTENSIONS } from "@/lib/constants";
 
 const MAX_DIMENSION = 2000;
 
@@ -16,6 +17,4 @@ export async function parseImage(buffer: Buffer, filename: string): Promise<{ ba
   }
 }
 
-export const IMAGE_EXTS = new Set([
-  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tiff", ".tif", ".bmp", ".heic", ".heif",
-]);
+export const IMAGE_EXTS = new Set(IMAGE_EXTENSIONS);

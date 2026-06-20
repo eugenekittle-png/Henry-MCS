@@ -12,6 +12,7 @@ import ClientMatterSelect from "@/components/ClientMatterSelect";
 import EdgarButton from "@/components/EdgarButton";
 import CourtListenerButton from "@/components/CourtListenerButton";
 import { parseContentAndCitations } from "@/lib/citations";
+import { ASSIST_EXTENSIONS } from "@/lib/constants";
 import type { Client, Matter } from "@/types";
 import type { EdgarFiling } from "@/components/EdgarBrowser";
 import type { CourtListenerOpinion } from "@/components/CourtListenerBrowser";
@@ -407,11 +408,11 @@ export default function AssistPage() {
         {/* File upload — top of card, locked once conversation starts */}
         {!hasMessages && (
           <div className="px-4 py-3 space-y-2 border-b border-gray-100">
-            <FileDropZone onFiles={handleFiles} />
+            <FileDropZone onFiles={handleFiles} accept={ASSIST_EXTENSIONS.join(",")} />
             <FileList files={files} onRemove={handleRemoveFile} />
             {files.length === 0 && edgarFilings.length === 0 && (
               <p className="text-xs text-gray-400">
-                Documents are optional — you can ask questions without uploading anything.
+                Documents and images are optional — you can ask questions without uploading anything.
               </p>
             )}
           </div>

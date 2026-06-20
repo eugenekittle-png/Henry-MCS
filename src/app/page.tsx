@@ -14,7 +14,7 @@ const faqs = [
   },
   {
     q: "What document types are supported?",
-    a: "The platform supports PDF, DOCX, DOC, XLSX, PPTX, TXT, CSV, MD, and ZIP archives. Most tools accept multiple files at once, and the Breakdown tool can process an entire ZIP of documents in one pass.",
+    a: "The platform supports PDF, DOCX, DOC, XLSX, PPTX, TXT, CSV, MD, and ZIP archives. The Assist tool also reads images (JPG, PNG, GIF, WEBP, TIFF, BMP, HEIC) — photos, screenshots, scans, diagrams, and handwritten notes. Most tools accept multiple files at once, and the Breakdown tool can process an entire ZIP of documents in one pass.",
   },
   {
     q: "How is my data kept secure?",
@@ -227,7 +227,7 @@ const TOOL_CARDS = [
     iconColor: "text-indigo-600",
     title: "Assist",
     desc: "Ask questions, analyze documents, and explore any topic with a conversational AI assistant built for law firm workflows.",
-    note: "Documents optional — supports PDF, DOCX, XLSX, TXT and more",
+    note: "Documents optional — supports PDF, DOCX, XLSX, TXT, images and more",
     iconPath: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z",
   },
   {

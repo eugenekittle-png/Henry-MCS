@@ -192,7 +192,7 @@ export default function HelpPage() {
         {/* ── Assist ─────────────────────────────────────────────── */}
         {canSee("assist") && <Section id="assist" title="Assist" color="bg-indigo-500">
           <p className="text-sm text-gray-600 mb-4">
-            Conversational AI for document Q&amp;A and legal research. Upload your own files, pull in public filings from SEC EDGAR or case law from CourtListener, or ask questions without any documents at all.
+            Conversational AI for document Q&amp;A and legal research. Upload your own files or images, pull in public filings from SEC EDGAR or case law from CourtListener, or ask questions without any documents at all.
           </p>
 
           <Image src={assistImg} alt="Assist screenshot" className="my-4 rounded-xl border border-gray-200 shadow-sm w-full h-auto" placeholder="blur" />
@@ -200,7 +200,7 @@ export default function HelpPage() {
           <div className="space-y-2 mb-5">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Steps</p>
             <Step number={1} text="Select a client and matter (used for billing and audit tracking)." />
-            <Step number={2} text="Optionally upload one or more documents — PDF, DOCX, XLSX, TXT, CSV and more are supported." />
+            <Step number={2} text="Optionally upload one or more documents or images — PDF, DOCX, XLSX, TXT, CSV plus image formats (JPG, PNG, GIF, WEBP, TIFF, BMP, HEIC) are supported." />
             <Step number={3} text="Optionally add Research Sources — use Add from SEC EDGAR to pull in a public filing, or Add from CourtListener to search and include a court opinion." />
             <Step number={4} text="Type your question or request and press Send. Documents and research sources are sent automatically on the first message." />
             <Step number={5} text="Follow up with additional questions — the assistant retains full context throughout the conversation." />
@@ -225,6 +225,7 @@ export default function HelpPage() {
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tips</p>
             <Tip text="Documents and research sources are locked once the conversation starts — add everything before sending your first message." />
             <Tip text="You can combine uploaded files and research sources in the same session (e.g. a contract and a relevant court opinion)." />
+            <Tip text="Upload images — photos, screenshots, scanned pages, diagrams, charts, or handwritten notes — and the assistant will read them, transcribe any visible text, and answer questions about what they show." />
             <Tip text="For CourtListener, check 'Precedential only' to filter to binding case law and reduce noise. Use 'Match case name only' when you know the exact case name." />
             <Tip text="If full opinion text is unavailable for a case, the assistant will note it and draw on its own knowledge of the case instead." />
             <Tip text="New Conversation keeps your client and matter selected — documents and research sources are cleared and can be changed." />

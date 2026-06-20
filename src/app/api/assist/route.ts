@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { parseFile } from "@/lib/parsers";
+import { parseImage, IMAGE_EXTS } from "@/lib/parsers/image";
 import { createChatStream } from "@/lib/anthropic";
 import { ASSIST_SYSTEM_PROMPT, MAX_FILE_SIZE, SUPPORTED_EXTENSIONS } from "@/lib/constants";
 import { detectSuspicious } from "@/lib/security";
@@ -57,16 +58,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Parse uploaded files — scanned/corrupt PDFs fall back to Claude native document blocks
+    // Parse uploaded files — scanned/corrupt PDFs fall back to Claude native document blocks,
+    // images are resized and sent as native image blocks for visual analysis.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pdfBlocks: { type: "document"; source: any }[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const imageBlocks: { type: "image"; source: any }[] = [];
     let documentContext = "";
     const fileNames: string[] = [];
+    const imageNames: string[] = [];
     for (const file of files) {
       const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-      if (!SUPPORTED_EXTENSIONS.includes(ext) || ext === ".zip") continue;
+      const isImage = IMAGE_EXTS.has(ext);
+      if ((!SUPPORTED_EXTENSIONS.includes(ext) && !isImage) || ext === ".zip") continue;
       if (file.size > MAX_FILE_SIZE) continue;
       const buffer = Buffer.from(await file.arrayBuffer());
+
+      if (isImage) {
+        try {
+          const { base64, mimeType } = await parseImage(buffer, file.name);
+          imageBlocks.push({ type: "image", source: { type: "base64", media_type: mimeType, data: base64 } });
+          imageNames.push(file.name);
+          fileNames.push(file.name);
+        } catch { /* skip unreadable image */ }
+        continue;
+      }
+
       let text = "";
       let usePdfFallback = false;
       try {
@@ -119,16 +136,23 @@ export async function POST(req: NextRequest) {
 
     const suspiciousFlags = detectSuspicious(prompt);
 
-    const textContent = `${contextPrefix}${documentContext ? `The following documents have been provided for context:\n\n<documents>\n${documentContext}</documents>\n\n` : ""}${prompt}`;
+    const imageNote = imageNames.length > 0
+      ? `The following images have been provided for analysis: ${imageNames.join(", ")}.\n\n`
+      : "";
+    const textContent = `${contextPrefix}${documentContext ? `The following documents have been provided for context:\n\n<documents>\n${documentContext}</documents>\n\n` : ""}${imageNote}${prompt}`;
 
-    // If any PDFs needed native reading, build a mixed content array; otherwise use plain string
-    const userMessageContent = pdfBlocks.length > 0
-      ? [...pdfBlocks, { type: "text" as const, text: textContent }]
+    // If any PDFs or images need native reading, build a mixed content array; otherwise use plain string
+    const hasBlocks = pdfBlocks.length > 0 || imageBlocks.length > 0;
+    const userMessageContent = hasBlocks
+      ? [...pdfBlocks, ...imageBlocks, { type: "text" as const, text: textContent }]
       : textContent;
 
-    // History always stores plain text (PDF blocks noted for context)
-    const userContent = pdfBlocks.length > 0
-      ? `${textContent}\n\n[${pdfBlocks.length} PDF(s) sent as native document]`
+    // History always stores plain text (PDF/image blocks noted for context)
+    const blockNotes: string[] = [];
+    if (pdfBlocks.length > 0) blockNotes.push(`${pdfBlocks.length} PDF(s) sent as native document`);
+    if (imageBlocks.length > 0) blockNotes.push(`${imageBlocks.length} image(s) sent`);
+    const userContent = blockNotes.length > 0
+      ? `${textContent}\n\n[${blockNotes.join("; ")}]`
       : textContent;
 
     const apiMessages: MessageParam[] = [
