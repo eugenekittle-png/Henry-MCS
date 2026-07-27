@@ -24,7 +24,7 @@ async function extractFromText(
   const excerpt = text.slice(0, 10000);
 
   const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 4096,
     system: `You are extracting structured data from a legal document to populate a comparison matrix.
 Extract the following fields. Return ONLY a valid JSON object where keys are exactly the column names and values are extracted strings (or null if not found). Keep values concise but complete.
@@ -58,7 +58,7 @@ async function buildConsensus(
     .join("\n\n");
 
   const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 2048,
     system: `You are synthesizing extracted data from multiple legal documents into a single consensus row.
 For each field, provide a brief synthesis that captures what is common, or highlights key differences across all documents.

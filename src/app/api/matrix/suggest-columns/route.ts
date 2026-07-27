@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   const excerpt = text.slice(0, 12000);
 
   const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 1024,
     system: `You are a legal document analyst. Your job is to identify the key data fields present in a document that would be useful to extract into a structured comparison table (a "matrix").
 Return ONLY a valid JSON array. Each element must have:

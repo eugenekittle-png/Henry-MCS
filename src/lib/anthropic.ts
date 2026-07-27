@@ -36,7 +36,7 @@ export function parseApiError(err: unknown): string {
 
 export function createStream(systemPrompt: string, userContent: string) {
   return client.messages.stream({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 16000,
     thinking: { type: "adaptive" },
     system: systemPrompt,
@@ -46,7 +46,7 @@ export function createStream(systemPrompt: string, userContent: string) {
 
 export function createChatStream(systemPrompt: string, messages: MessageParam[]) {
   return client.messages.stream({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 16000,
     thinking: { type: "adaptive" },
     system: systemPrompt,
@@ -56,7 +56,7 @@ export function createChatStream(systemPrompt: string, messages: MessageParam[])
 
 export function createDocumentStream(systemPrompt: string, pdfBase64: string, contextText: string) {
   return client.messages.stream({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 8192,
     system: systemPrompt,
     messages: [{
@@ -79,7 +79,7 @@ export function createDocumentStream(systemPrompt: string, pdfBase64: string, co
 
 export function createVisionStream(systemPrompt: string, imageBase64: string, mimeType: string, contextText: string) {
   return client.messages.stream({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     max_tokens: 4096,
     system: systemPrompt,
     messages: [{

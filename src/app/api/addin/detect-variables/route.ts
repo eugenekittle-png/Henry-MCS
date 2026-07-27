@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     const excerpt = documentText.slice(0, 12000);
 
     const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       max_tokens: 8192,
       tools: [
         {
