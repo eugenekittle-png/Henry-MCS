@@ -638,7 +638,7 @@ export default function MyUsagePage() {
       )}
 
       <p className="text-xs text-gray-400 mt-4 text-center">
-        Pricing based on Claude Sonnet 4.6 — ${INPUT_COST_PER_M.toFixed(2)}/M input tokens, ${OUTPUT_COST_PER_M.toFixed(2)}/M output tokens
+        Pricing based on Claude Sonnet 5 — ${INPUT_COST_PER_M.toFixed(2)}/M input tokens, ${OUTPUT_COST_PER_M.toFixed(2)}/M output tokens
       </p>
     </div>
   );

@@ -27,7 +27,7 @@ interface LogRow {
 
 type GroupBy = "user" | "client" | "matter" | "log";
 
-// Claude Sonnet 4.6 pricing
+// Claude Sonnet 5 pricing
 const INPUT_COST_PER_M = 3.0;
 const OUTPUT_COST_PER_M = 15.0;
 
@@ -169,7 +169,7 @@ export default function UsagePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Usage & Cost</h1>
           <p className="text-gray-600 text-sm mt-1">
-            Claude Sonnet 4.6 — ${INPUT_COST_PER_M.toFixed(2)}/M input tokens, ${OUTPUT_COST_PER_M.toFixed(2)}/M output tokens
+            Claude Sonnet 5 — ${INPUT_COST_PER_M.toFixed(2)}/M input tokens, ${OUTPUT_COST_PER_M.toFixed(2)}/M output tokens
           </p>
         </div>
         <div className="flex gap-2">
