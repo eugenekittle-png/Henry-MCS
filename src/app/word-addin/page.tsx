@@ -55,6 +55,8 @@ export default function WordAddinPage() {
   const [askFollowUpStreaming, setAskFollowUpStreaming] = useState(false);
 
   // Suggest changes state
+  const [updateInstruction, setUpdateInstruction] = useState("");
+  const [activeSuggestInstruction, setActiveSuggestInstruction] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -609,6 +611,8 @@ export default function WordAddinPage() {
     setSuggestError(null);
     setSuggestLoading(false);
     setAppliedIndices(new Set());
+    setActiveSuggestInstruction("");
+    setUpdateInstruction("");
   }
 
   async function getDocumentText(selectionOnly: boolean): Promise<string> {
@@ -629,7 +633,7 @@ export default function WordAddinPage() {
     });
   }
 
-  async function handleSuggestChanges() {
+  async function handleSuggestChanges(instruction?: string) {
     if (!officeReady) return;
     // Clear ask mode
     setAskContent("");
@@ -641,6 +645,7 @@ export default function WordAddinPage() {
     setSuggestions(null);
     setSuggestError(null);
     setAppliedIndices(new Set());
+    setActiveSuggestInstruction(instruction?.trim() || "");
     setSuggestLoading(true);
 
     let paragraphs: string[];
@@ -667,6 +672,7 @@ export default function WordAddinPage() {
         headers,
         body: JSON.stringify({
           paragraphs,
+          instruction: instruction?.trim() || undefined,
           client: clientLabel,
           matter: matterLabel,
           clientNumber: selectedClient?.client_number ?? null,
@@ -1145,7 +1151,9 @@ export default function WordAddinPage() {
                   <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
                     {suggestActive ? (
                       <>
-                        <p className="flex-1 text-xs text-gray-500 font-medium">Suggest Changes</p>
+                        <p className="flex-1 text-xs text-gray-500 font-medium truncate" title={activeSuggestInstruction || undefined}>
+                          {activeSuggestInstruction ? `Update: ${activeSuggestInstruction}` : "Suggest Changes"}
+                        </p>
                         {suggestions && suggestions.length > 0 && appliedIndices.size < suggestions.length && (
                           <>
                             <button
@@ -1233,16 +1241,29 @@ export default function WordAddinPage() {
                         Ask about Selection
                       </button>
                     </div>
-                    {/* Suggest Changes */}
-                    <div className="border-t border-gray-100 pt-2">
+                    {/* Suggest Changes / Update Document */}
+                    <div className="border-t border-gray-100 pt-2 space-y-1.5">
+                      <textarea
+                        rows={2}
+                        value={updateInstruction}
+                        onChange={e => setUpdateInstruction(e.target.value)}
+                        placeholder='Optional: describe a change to make throughout the document, e.g. "Change the county from Los Angeles to Orange County" or "Update all dates to reflect a 2027 closing"'
+                        disabled={suggestLoading}
+                        title="Tip: Press Win + H to dictate using Windows Voice Typing"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 resize-none"
+                      />
                       <button
-                        onClick={handleSuggestChanges}
-                        disabled={!officeReady || matterRequired}
+                        onClick={() => handleSuggestChanges(updateInstruction)}
+                        disabled={!officeReady || matterRequired || suggestLoading}
                         className="w-full bg-indigo-600 text-white py-2 rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Suggest Changes
+                        {updateInstruction.trim() ? "Apply Update" : "Suggest Changes"}
                       </button>
-                      <p className="text-xs text-gray-400 text-center mt-1">Applies AI suggestions as tracked changes in Word</p>
+                      <p className="text-xs text-gray-400 text-center">
+                        {updateInstruction.trim()
+                          ? "Finds every paragraph affected by your instruction and applies it as tracked changes"
+                          : "Applies AI suggestions as tracked changes in Word"}
+                      </p>
                     </div>
                     {matterRequired && (
                       <p className="text-xs text-amber-600 text-center">Select a client and matter above to continue.</p>
@@ -1264,7 +1285,7 @@ export default function WordAddinPage() {
                           <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
                           <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
                           <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
-                          <span>Analyzing document...</span>
+                          <span>{activeSuggestInstruction ? "Applying your instruction..." : "Analyzing document..."}</span>
                         </div>
                       )}
 
@@ -1284,7 +1305,9 @@ export default function WordAddinPage() {
 
                       {suggestions !== null && !suggestLoading && (
                         suggestions.length === 0 ? (
-                          <p className="text-xs text-gray-500 text-center mt-4">No changes needed — the document looks good.</p>
+                          <p className="text-xs text-gray-500 text-center mt-4">
+                            {activeSuggestInstruction ? "Nothing in the document matched your instruction." : "No changes needed — the document looks good."}
+                          </p>
                         ) : (
                           <div className="space-y-2 mt-1">
                             {suggestions.map((s, i) => {
